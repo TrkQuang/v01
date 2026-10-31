@@ -102,42 +102,29 @@ def _human_type(el, text: str):
 
 def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     """
-    Return a headless Chrome WebDriver fully configured to impersonate a
-    real Google Pixel 11 Pro running Android 17 / Chrome 152.
-
-    Spoofing layers (applied in order):
-      1. Chrome launch flags   – mobile emulation, reduced UA, anti-detection
-      2. CDP commands          – authoritative screen metrics, UA client hints,
-                                 touch emulation
-      3. JS injection          – navigator props, WebGL GPU, battery, network,
-                                 chrome runtime object, plugins
+    Return a Chrome WebDriver configured to impersonate a
+    Google Pixel 9 Pro running Android 15.
     """
     options = Options()
 
-    # If running with Xvfb virtual display (DISPLAY=:99), run headed for max stealth
     has_display = bool(os.environ.get("DISPLAY"))
-    if config.HEADLESS and not has_display:
-        options.add_argument("--headless=new")
+    if config.HEADLESS:
+        if has_display:
+            pass
+        else:
+            options.add_argument("--window-position=-2000,-2000")
+    else:
+        options.add_argument("--window-position=-2000,-2000")
 
     # ── Core stability flags ──────────────────────────────────────────────────
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-notifications")
     options.add_argument("--mute-audio")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--disable-sync")
-    options.add_argument("--metrics-recording-only")
-    options.add_argument("--js-flags=--max-old-space-size=512")
-    options.add_argument("--renderer-process-limit=1")
-
-    # ── Realism flags (match a real Chrome on Android) ────────────────────────
-    options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
     options.add_argument("--lang=en-US")
 
-    # ── Window size = Pixel 11 Pro CSS viewport ───────────────────────────────
+    # ── Window size = Pixel 11 Pro CSS viewport ──────────────────────────────
     w, h = profile.screen_width, profile.screen_height
     options.add_argument(f"--window-size={w},{h}")
     options.add_argument(f"--user-agent={profile.user_agent}")
@@ -147,19 +134,17 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    # ── Stealth launch options ────────────────────────────────────────────────
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-renderer-backgrounding")
-
     # ── Launch browser ────────────────────────────────────────────────────────
     chromium_binary = shutil.which("chromium") or shutil.which("chromium-browser")
-    chromedriver_binary = shutil.which("chromedriver") or "chromedriver"
+    chromedriver_binary = shutil.which("chromedriver")
     if chromium_binary:
         options.binary_location = chromium_binary
-    if os.path.isabs(chromedriver_binary) or shutil.which(chromedriver_binary):
-        chromedriver_binary = _patch_chromedriver(shutil.which(chromedriver_binary) or chromedriver_binary)
-    service = Service(executable_path=chromedriver_binary)
-    driver = webdriver.Chrome(service=service, options=options)
+    if chromedriver_binary and os.path.exists(chromedriver_binary):
+        chromedriver_binary = _patch_chromedriver(chromedriver_binary)
+        service = Service(executable_path=chromedriver_binary)
+        driver = webdriver.Chrome(service=service, options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
 
     # ── CDP layer 1: authoritative screen metrics + touch ─────────────────────
     driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
@@ -174,7 +159,6 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     })
 
     # ── CDP layer 2: User-Agent + full Sec-CH-UA-* client hints ──────────────
-    # This is what Google reads to know the real device behind the reduced UA.
     driver.execute_cdp_cmd("Emulation.setUserAgentOverride", {
         "userAgent":         profile.user_agent,
         "acceptLanguage":    "en-US,en;q=0.9",
@@ -186,12 +170,6 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     driver.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {
         "enabled":       True,
         "maxTouchPoints": profile.max_touch_points,
-    })
-
-    # ── CDP layer 4: JS navigator/WebGL/battery/network spoofing ─────────────
-    # Injected before every page's own JS runs.
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": profile.navigator_js()
     })
 
     driver.implicitly_wait(config.IMPLICIT_WAIT)
@@ -546,8 +524,12 @@ def _gmail_login(driver: webdriver.Chrome, email: str, password: str,
         time.sleep(3)
 
         # Early check: Detect Google anti-bot block before password step
-        page_src = driver.page_source.lower()
-        if "couldn't sign you in" in page_src or "this browser or app may not be secure" in page_src:
+        body_text = ""
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        except Exception:
+            body_text = driver.page_source.lower()
+        if "couldn't sign you in" in body_text or "this browser or app may not be secure" in body_text:
             _report(cb, "❌ Step 2/6 — Google blocked login (This browser or app may not be secure).", driver)
             return False
 

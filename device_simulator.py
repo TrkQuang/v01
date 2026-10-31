@@ -19,7 +19,6 @@ import config
 
 
 # ── Real Google Pixel TAC prefixes (Type Allocation Code) ────────────────────
-# These are genuine GSMA-registered TAC codes for Google Pixel devices.
 PIXEL_TAC_PREFIXES = [
     "35272012",  # Pixel 9 Pro
     "35383711",  # Pixel 8 Pro
@@ -61,8 +60,8 @@ def _generate_device_fingerprint(model: str, build_id: str, android: str, codena
 
 
 def _random_chrome_patch() -> str:
-    """Return a realistic Chrome 152 version string with slight random patch."""
-    major = config.CHROME_MAJOR_VERSION       # 149
+    """Return a realistic Chrome version string with slight random patch."""
+    major = config.CHROME_MAJOR_VERSION
     build = random.randint(7880, 7920)
     patch = random.randint(120, 180)
     return f"{major}.0.{build}.{patch}"
@@ -87,21 +86,19 @@ class DeviceProfile:
     android_sdk:     str   = config.ANDROID_SDK
     build_id:        str   = config.BUILD_ID
 
-    # Hardware capabilities (spoofed via CDP + JS injection)
-    device_memory:          int   = 16        # 16 GB RAM (spoofed, browser API has no cap in JS)
-    hardware_concurrency:   int   = config.DEVICE_CPU_CORES  # Tensor G6 (malibu): 7 reported cores
-    max_touch_points:       int   = 5         # realistic multitouch
-    screen_width:           int   = config.SCREEN_CSS_WIDTH   # 412
-    screen_height:          int   = config.SCREEN_CSS_HEIGHT  # 915
-    pixel_ratio:            float = config.SCREEN_PIXEL_RATIO # 3.5
+    # Hardware capabilities
+    device_memory:          int   = config.DEVICE_RAM_GB
+    hardware_concurrency:   int   = config.DEVICE_CPU_CORES
+    max_touch_points:       int   = 5
+    screen_width:           int   = config.SCREEN_CSS_WIDTH
+    screen_height:          int   = config.SCREEN_CSS_HEIGHT
+    pixel_ratio:            float = config.SCREEN_PIXEL_RATIO
     gpu_vendor:             str   = config.DEVICE_GPU_VENDOR
     gpu_renderer:           str   = config.DEVICE_GPU_RENDERER
 
     def client_hints_metadata(self) -> dict:
         """
         Full userAgentMetadata dict for CDP Emulation.setUserAgentOverride.
-        This is what Google reads via the Sec-CH-UA-* headers to identify
-        the real device behind the reduced User-Agent string.
         """
         major = str(config.CHROME_MAJOR_VERSION)
         return {
@@ -118,193 +115,11 @@ class DeviceProfile:
             "platform":        "Android",
             "platformVersion": f"{config.ANDROID_VERSION}.0.0",
             "architecture":    "arm",
-            "model":           self.model,      # "Pixel 11 Pro" — the real device hint
+            "model":           self.model,      # "Pixel 11 Pro"
             "mobile":          True,
             "bitness":         "64",
             "wow64":           False,
         }
-
-    def navigator_js(self) -> str:
-        """
-        JavaScript injected on every new document via CDP
-        Page.addScriptToEvaluateOnNewDocument.
-
-        Overrides all detectable browser fingerprint signals to match a real
-        physical Pixel 11 Pro running Chrome 152.
-        """
-        gpu_vendor   = self.gpu_vendor.replace("'", "\\'")
-        gpu_renderer = self.gpu_renderer.replace("'", "\\'")
-        return f"""
-(function () {{
-  'use strict';
-
-  // ── 1. Remove automation trace ──────────────────────────────────────────
-  try {{
-    if ('webdriver' in navigator) {{
-      delete Object.getPrototypeOf(navigator).webdriver;
-    }}
-  }} catch (e) {{}}
-
-  // ── 2. Platform ─────────────────────────────────────────────────────────
-  try {{
-    Object.defineProperty(navigator, 'platform', {{
-      get: () => 'Linux armv8l',
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 3. Hardware ─────────────────────────────────────────────────────────
-  try {{
-    Object.defineProperty(navigator, 'deviceMemory', {{
-      get: () => {self.device_memory},
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  try {{
-    Object.defineProperty(navigator, 'hardwareConcurrency', {{
-      get: () => {self.hardware_concurrency},
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  try {{
-    Object.defineProperty(navigator, 'maxTouchPoints', {{
-      get: () => {self.max_touch_points},
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 4. Touch support flags ──────────────────────────────────────────────
-  try {{
-    window.ontouchstart = null;
-    window.ontouchmove  = null;
-    window.ontouchend   = null;
-    window.TouchEvent   = window.TouchEvent || function () {{}};
-  }} catch (e) {{}}
-
-  // ── 5. Vendor ───────────────────────────────────────────────────────────
-  try {{
-    Object.defineProperty(navigator, 'vendor', {{
-      get: () => 'Google Inc.',
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 6. Language ─────────────────────────────────────────────────────────
-  try {{
-    Object.defineProperty(navigator, 'language', {{
-      get: () => 'en-US',
-      configurable: true
-    }});
-    Object.defineProperty(navigator, 'languages', {{
-      get: () => Object.freeze(['en-US', 'en']),
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 7. Screen geometry ──────────────────────────────────────────────────
-  try {{
-    Object.defineProperty(screen, 'width',       {{ get: () => {self.screen_width},  configurable: true }});
-    Object.defineProperty(screen, 'height',      {{ get: () => {self.screen_height}, configurable: true }});
-    Object.defineProperty(screen, 'availWidth',  {{ get: () => {self.screen_width},  configurable: true }});
-    Object.defineProperty(screen, 'availHeight', {{ get: () => {self.screen_height}, configurable: true }});
-    Object.defineProperty(screen, 'colorDepth',  {{ get: () => 24, configurable: true }});
-    Object.defineProperty(screen, 'pixelDepth',  {{ get: () => 24, configurable: true }});
-    Object.defineProperty(window, 'devicePixelRatio', {{
-      get: () => {self.pixel_ratio},
-      configurable: true
-    }});
-    Object.defineProperty(window, 'innerWidth',  {{ get: () => {self.screen_width},  configurable: true }});
-    Object.defineProperty(window, 'innerHeight', {{ get: () => {self.screen_height}, configurable: true }});
-  }} catch (e) {{}}
-
-  // ── 8. WebGL GPU fingerprint ────────────────────────────────────────────
-  const patchWebGL = (Ctx) => {{
-    if (!Ctx) return;
-    const orig = Ctx.prototype.getParameter;
-    Ctx.prototype.getParameter = function (param) {{
-      if (param === 0x9245) return '{gpu_vendor}';   // UNMASKED_VENDOR_WEBGL
-      if (param === 0x9246) return '{gpu_renderer}'; // UNMASKED_RENDERER_WEBGL
-      if (param === 0x1F00) return '{gpu_vendor}';   // VENDOR
-      if (param === 0x1F01) return '{gpu_renderer}'; // RENDERER
-      return orig.call(this, param);
-    }};
-  }};
-  try {{ patchWebGL(WebGLRenderingContext);  }} catch (e) {{}}
-  try {{ patchWebGL(WebGL2RenderingContext); }} catch (e) {{}}
-
-  // ── 9. Battery API ──────────────────────────────────────────────────────
-  try {{
-    const level = 0.82 + Math.random() * 0.16;
-    const fakeBattery = {{
-      charging: true,
-      chargingTime: 0,
-      dischargingTime: Infinity,
-      level: level,
-      addEventListener:    () => {{}},
-      removeEventListener: () => {{}},
-      dispatchEvent:       () => false,
-    }};
-    navigator.getBattery = () => Promise.resolve(fakeBattery);
-  }} catch (e) {{}}
-
-  // ── 10. Network info ────────────────────────────────────────────────────
-  try {{
-    const conn = {{
-      effectiveType: '4g',
-      downlink:      12.5,
-      rtt:           45,
-      saveData:      false,
-      type:          'wifi',
-      addEventListener:    () => {{}},
-      removeEventListener: () => {{}},
-    }};
-    Object.defineProperty(navigator, 'connection', {{
-      get: () => conn,
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 11. Plugins / MimeTypes (Android Chrome has none) ──────────────────
-  try {{
-    Object.defineProperty(navigator, 'plugins', {{
-      get: () => Object.freeze([]),
-      configurable: true
-    }});
-    Object.defineProperty(navigator, 'mimeTypes', {{
-      get: () => Object.freeze([]),
-      configurable: true
-    }});
-  }} catch (e) {{}}
-
-  // ── 12. Permissions (notifications always denied on Android) ───────────
-  try {{
-    const origQuery = navigator.permissions.query.bind(navigator.permissions);
-    navigator.permissions.query = (params) => {{
-      if (params && params.name === 'notifications') {{
-        return Promise.resolve({{ state: 'denied', onchange: null }});
-      }}
-      return origQuery(params);
-    }};
-  }} catch (e) {{}}
-
-  // ── 13. Chrome runtime object (present on real Chrome) ─────────────────
-  try {{
-    if (!window.chrome) {{
-      window.chrome = {{
-        runtime: {{
-          connect:   () => {{}},
-          sendMessage: () => {{}},
-        }},
-        loadTimes:  () => {{}},
-        csi:        () => {{}},
-      }};
-    }}
-  }} catch (e) {{}}
-
-}})();
-"""
 
     def as_headers(self) -> dict:
         return {
@@ -332,11 +147,10 @@ class DeviceProfile:
 def create_device_profile() -> DeviceProfile:
     """
     Create a fresh Pixel 11 Pro device profile with unique per-session
-    identifiers and a fully spoofed hardware fingerprint.
+    identifiers and a realistic hardware fingerprint.
     """
     chrome_version = _random_chrome_patch()
 
-    # Chrome UA Reduction: device model never appears in UA string
     template   = config.USER_AGENT_TEMPLATES[0]
     user_agent = template.format(chrome=chrome_version)
 

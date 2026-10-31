@@ -3,6 +3,7 @@ Configuration and constants for the Pixel 11 Pro Google One Gemini Bot.
 """
 
 import os
+import subprocess
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8807729422:AAHW7lDWYV6q2jNtAtSBez7H-g0hdlZeKmQ")
@@ -17,7 +18,7 @@ ANDROID_SDK         = "37"
 BUILD_ID            = "CD1A.261005.003"       # Pixel 11 Pro factory build ID
 
 # Hardware profile (used for navigator injection)
-DEVICE_RAM_GB           = 16                  # 16 GB RAM (spoofed as 16 via JS)
+DEVICE_RAM_GB           = 16                  # 16 GB RAM
 DEVICE_CPU_CORES        = 7                   # Tensor G6 (malibu): 7 reported cores
 DEVICE_MAX_TOUCH        = 5                   # 5-point multitouch (realistic)
 DEVICE_GPU_VENDOR       = "Imagination Technologies"
@@ -28,14 +29,23 @@ SCREEN_CSS_WIDTH    = 412
 SCREEN_CSS_HEIGHT   = 915
 SCREEN_PIXEL_RATIO  = 3.5
 
-# ── Chrome 149 (latest stable on Android) ────────────────────────────────────
-CHROME_VERSION       = "152.0.7892.140"
-CHROME_MAJOR_VERSION = 152
+# ── Chrome Version ────────────────────────────────────────────────────────────
+def _detect_chrome_version() -> str:
+    """Detect installed Chrome/Chromium version or fallback to 156.0.8078.74."""
+    for cmd in ["google-chrome --version", "google-chrome-stable --version", "chromium --version", "chrome --version"]:
+        try:
+            out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
+            parts = [p for p in out.split() if "." in p]
+            if parts:
+                return parts[0]
+        except Exception:
+            pass
+    return "156.0.8078.74"
+
+CHROME_VERSION       = _detect_chrome_version()
+CHROME_MAJOR_VERSION = int(CHROME_VERSION.split(".")[0]) if "." in CHROME_VERSION else 156
 
 # ── User-Agent – Chrome UA Reduction (Chrome 110+) ───────────────────────────
-# Modern Chrome on Android NEVER reveals device model in the UA string.
-# The real device identity is sent via Sec-CH-UA-Model client hint.
-# Format: "Mozilla/5.0 (Linux; Android 10; K) ... Chrome/<version> Mobile Safari/537.36"
 USER_AGENT_TEMPLATES = [
     (
         "Mozilla/5.0 (Linux; Android 10; K) "
@@ -45,7 +55,9 @@ USER_AGENT_TEMPLATES = [
 ]
 
 # ── Google URLs ───────────────────────────────────────────────────────────────
-GMAIL_LOGIN_URL       = "https://accounts.google.com/ServiceLogin?service=googleone&continue=https%3A%2F%2Fone.google.com%2F&hl=en"
+# NOTE: accounts.google.com/ServiceLogin?hl=en avoids high-risk service check
+# that triggers "This browser or app may not be secure" block.
+GMAIL_LOGIN_URL       = "https://accounts.google.com/ServiceLogin?hl=en"
 GOOGLE_ONE_URL        = "https://one.google.com/"
 GOOGLE_ONE_OFFERS_URL = "https://one.google.com/about/plans"
 
@@ -66,7 +78,7 @@ GEMINI_OFFER_KEYWORDS = [
 WEBDRIVER_TIMEOUT  = 30   # seconds – explicit wait
 IMPLICIT_WAIT      = 10   # seconds
 PAGE_LOAD_TIMEOUT  = 60   # seconds
-HEADLESS           = True # always headless on Replit
+HEADLESS           = False # Keep False so Chrome runs in headed/offscreen mode (bypasses Google bot detection)
 
 # ── Session storage ───────────────────────────────────────────────────────────
 SESSION_STORE: dict = {}
