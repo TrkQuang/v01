@@ -63,7 +63,7 @@ def _report(cb: ProgressCB, msg: str, driver: Optional[webdriver.Chrome] = None)
 def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     """
     Return a headless Chrome WebDriver fully configured to impersonate a
-    real Google Pixel 10 Pro running Android 16 / Chrome 149.
+    real Google Pixel 11 Pro running Android 17 / Chrome 152.
 
     Spoofing layers (applied in order):
       1. Chrome launch flags   – mobile emulation, reduced UA, anti-detection
@@ -95,7 +95,7 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
     options.add_argument("--lang=en-US")
 
-    # ── Window size = Pixel 10 Pro CSS viewport ───────────────────────────────
+    # ── Window size = Pixel 11 Pro CSS viewport ───────────────────────────────
     w, h = profile.screen_width, profile.screen_height
     options.add_argument(f"--window-size={w},{h}")
     options.add_argument(f"--user-agent={profile.user_agent}")
@@ -683,7 +683,7 @@ def check_gemini_offer(email: str, password: str,
     driver: Optional[webdriver.Chrome] = None
     try:
         _report(progress_callback,
-                f"🤖 Starting Pixel 10 Pro simulator\n"
+                f"🤖 Starting Pixel 11 Pro simulator\n"
                 f"📱 Session: {device.session_id[:8]}…\n"
                 f"🌐 User-Agent: {device.user_agent[:60]}…")
 

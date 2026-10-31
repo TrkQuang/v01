@@ -1,5 +1,5 @@
 """
-Configuration and constants for the Pixel 10 Pro Google One Gemini Bot.
+Configuration and constants for the Pixel 11 Pro Google One Gemini Bot.
 """
 
 import os
@@ -7,29 +7,30 @@ import os
 # ── Telegram ──────────────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8807729422:AAHW7lDWYV6q2jNtAtSBez7H-g0hdlZeKmQ")
 
-# ── Device specs – Google Pixel 10 Pro (Android 16) ──────────────────────────
-DEVICE_MODEL        = "Pixel 10 Pro"
+# ── Device specs – Google Pixel 11 Pro (Android 17) ──────────────────────────
+DEVICE_MODEL        = "Pixel 11 Pro"
+DEVICE_CODENAME     = "grizzly"               # Pixel 11 Pro codename (XL is "kodiak")
 DEVICE_BRAND        = "google"
 DEVICE_MANUFACTURER = "Google"
-ANDROID_VERSION     = "16"
-ANDROID_SDK         = "36"
-BUILD_ID            = "CP1A.260405.005"       # Pixel 10 Pro build fingerprint
+ANDROID_VERSION     = "17"
+ANDROID_SDK         = "37"
+BUILD_ID            = "CD1A.261005.003"       # Pixel 11 Pro factory build ID
 
 # Hardware profile (used for navigator injection)
 DEVICE_RAM_GB           = 16                  # 16 GB RAM (spoofed as 16 via JS)
-DEVICE_CPU_CORES        = 8                   # Tensor G5: 8 reported cores
+DEVICE_CPU_CORES        = 7                   # Tensor G6 (malibu): 7 reported cores
 DEVICE_MAX_TOUCH        = 5                   # 5-point multitouch (realistic)
 DEVICE_GPU_VENDOR       = "Imagination Technologies"
-DEVICE_GPU_RENDERER     = "PowerVR DXT-48-1536"  # Tensor G5 GPU
+DEVICE_GPU_RENDERER     = "PowerVR CXTP-48-1536"  # Tensor G6 GPU architecture
 
-# Screen – Pixel 10 Pro: CSS viewport 412×915 @3.5× density (~495 PPI)
+# Screen – Pixel 11 Pro: CSS viewport 412×915 @3.5× density (~495 PPI)
 SCREEN_CSS_WIDTH    = 412
 SCREEN_CSS_HEIGHT   = 915
 SCREEN_PIXEL_RATIO  = 3.5
 
 # ── Chrome 149 (latest stable on Android) ────────────────────────────────────
-CHROME_VERSION       = "149.0.7827.200"
-CHROME_MAJOR_VERSION = 149
+CHROME_VERSION       = "152.0.7892.140"
+CHROME_MAJOR_VERSION = 152
 
 # ── User-Agent – Chrome UA Reduction (Chrome 110+) ───────────────────────────
 # Modern Chrome on Android NEVER reveals device model in the UA string.

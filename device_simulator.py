@@ -1,8 +1,8 @@
 """
-Android Pixel 10 Pro device simulator.
+Android Pixel 11 Pro device simulator.
 
 Each session gets unique identifiers (IMEI, Android ID, device fingerprint,
-Chrome version patch) while the hardware identity remains "Pixel 10 Pro".
+Chrome version patch) while the hardware identity remains "Pixel 11 Pro".
 
 Key implementation detail:
   Chrome 110+ uses UA Reduction — the User-Agent string always shows
@@ -55,16 +55,16 @@ def _generate_android_id() -> str:
     return "".join(random.choices("0123456789abcdef", k=16))
 
 
-def _generate_device_fingerprint(model: str, build_id: str, android: str) -> str:
-    slug = model.lower().replace(" ", "_")
-    return f"google/{slug}/{slug}:{android}/{build_id}/eng.user.release-keys"
+def _generate_device_fingerprint(model: str, build_id: str, android: str, codename: str = "") -> str:
+    cname = codename or getattr(config, "DEVICE_CODENAME", "grizzly")
+    return f"google/{cname}/{cname}:{android}/{build_id}/12589321:user/release-keys"
 
 
 def _random_chrome_patch() -> str:
-    """Return a realistic Chrome 149 version string with slight random patch."""
+    """Return a realistic Chrome 152 version string with slight random patch."""
     major = config.CHROME_MAJOR_VERSION       # 149
-    build = random.randint(7820, 7840)
-    patch = random.randint(180, 220)
+    build = random.randint(7880, 7920)
+    patch = random.randint(120, 180)
     return f"{major}.0.{build}.{patch}"
 
 
@@ -79,7 +79,7 @@ class DeviceProfile:
     chrome_version:     str
     session_id:         str = field(default_factory=lambda: str(uuid.uuid4()))
 
-    # Fixed Pixel 10 Pro hardware identity
+    # Fixed Pixel 11 Pro hardware identity
     model:           str   = config.DEVICE_MODEL
     brand:           str   = config.DEVICE_BRAND
     manufacturer:    str   = config.DEVICE_MANUFACTURER
@@ -89,7 +89,7 @@ class DeviceProfile:
 
     # Hardware capabilities (spoofed via CDP + JS injection)
     device_memory:          int   = 16        # 16 GB RAM (spoofed, browser API has no cap in JS)
-    hardware_concurrency:   int   = 8         # Tensor G5 reported cores
+    hardware_concurrency:   int   = config.DEVICE_CPU_CORES  # Tensor G6 (malibu): 7 reported cores
     max_touch_points:       int   = 5         # realistic multitouch
     screen_width:           int   = config.SCREEN_CSS_WIDTH   # 412
     screen_height:          int   = config.SCREEN_CSS_HEIGHT  # 915
@@ -118,7 +118,7 @@ class DeviceProfile:
             "platform":        "Android",
             "platformVersion": f"{config.ANDROID_VERSION}.0.0",
             "architecture":    "arm",
-            "model":           self.model,      # "Pixel 10 Pro" — the real device hint
+            "model":           self.model,      # "Pixel 11 Pro" — the real device hint
             "mobile":          True,
             "bitness":         "64",
             "wow64":           False,
@@ -130,7 +130,7 @@ class DeviceProfile:
         Page.addScriptToEvaluateOnNewDocument.
 
         Overrides all detectable browser fingerprint signals to match a real
-        physical Pixel 10 Pro running Chrome 149.
+        physical Pixel 11 Pro running Chrome 152.
         """
         gpu_vendor   = self.gpu_vendor.replace("'", "\\'")
         gpu_renderer = self.gpu_renderer.replace("'", "\\'")
@@ -335,7 +335,7 @@ class DeviceProfile:
 
 def create_device_profile() -> DeviceProfile:
     """
-    Create a fresh Pixel 10 Pro device profile with unique per-session
+    Create a fresh Pixel 11 Pro device profile with unique per-session
     identifiers and a fully spoofed hardware fingerprint.
     """
     chrome_version = _random_chrome_patch()

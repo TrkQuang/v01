@@ -1,5 +1,5 @@
 """
-Telegram Bot entry point for the Pixel 10 Pro Google One Gemini Bot.
+Telegram Bot entry point for the Pixel 11 Pro Google One Gemini Bot.
 
 Commands:
   /start        – Show welcome message and available commands
@@ -77,8 +77,8 @@ def _make_progress_callback(bot, chat_id: int, loop: asyncio.AbstractEventLoop):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send welcome message with command menu."""
     await update.message.reply_text(
-        "🤖 *Pixel 10 Pro Google One Bot*\n\n"
-        "This bot simulates a Google Pixel 10 Pro (Android 16) device, "
+        "🤖 *Pixel 11 Pro Google One Bot*\n\n"
+        "This bot simulates a Google Pixel 11 Pro (Android 17) device, "
         "logs into your Google account, and retrieves the *12-month free "
         "Gemini Pro* offer link from Google One.\n\n"
         "📋 *Available Commands:*\n"
@@ -157,7 +157,7 @@ async def login_totp(update: Update,
     await context.bot.send_message(
         chat_id=chat_id,
         text=(
-            "✅ *Credentials saved* — new Pixel 10 Pro profile created.\n\n"
+            "✅ *Credentials saved* — new Pixel 11 Pro profile created.\n\n"
             f"{totp_status}\n\n"
             + session["device"].summary()
             + "\n\nUse /check\\_offer to start the automation."
