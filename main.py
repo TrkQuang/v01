@@ -236,10 +236,10 @@ async def check_offer(update: Update,
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "🎉 *Gemini Pro Offer Found!*\n\n"
-                "Tap the link below to activate your 12-month free Gemini Pro:\n\n"
-                f"🔗 {offer_link}\n\n"
-                "_Use /get\\_link to retrieve this link again._"
+                "🎉 *Google One / Gemini Offer Processed!*\n\n"
+                f"🔗 *Offer link:*\n{offer_link}\n\n"
+                "Bot đã tự động đóng các popup che màn hình và bấm nhận gói trên Google One.\n"
+                "_Dùng lệnh /get\\_link để xem lại liên kết._"
             ),
             parse_mode="Markdown",
         )

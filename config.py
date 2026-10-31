@@ -57,21 +57,32 @@ USER_AGENT_TEMPLATES = [
 # ── Google URLs ───────────────────────────────────────────────────────────────
 # NOTE: accounts.google.com/ServiceLogin?hl=en avoids high-risk service check
 # that triggers "This browser or app may not be secure" block.
-GMAIL_LOGIN_URL       = "https://accounts.google.com/ServiceLogin?hl=en"
-GOOGLE_ONE_URL        = "https://one.google.com/"
-GOOGLE_ONE_OFFERS_URL = "https://one.google.com/about/plans"
+GMAIL_LOGIN_URL         = "https://accounts.google.com/ServiceLogin?hl=en"
+GOOGLE_ONE_URL          = "https://one.google.com/"
+GOOGLE_ONE_BENEFITS_URL = "https://one.google.com/benefits"
+GOOGLE_ONE_OFFERS_URL   = "https://one.google.com/about/plans"
 
-# ── Gemini offer detection keywords ──────────────────────────────────────────
+# ── Gemini / Google One Pixel offer detection keywords ──────────────────────
 GEMINI_OFFER_KEYWORDS = [
     "gemini pro",
     "gemini advanced",
+    "bard advanced",
+    "bard_advanced",
     "12 month",
     "12-month",
+    "6 month",
+    "6-month",
+    "3 month",
+    "3-month",
     "free trial",
     "activate",
     "get started",
     "claim offer",
     "redeem",
+    "benefit",
+    "ưu đãi",
+    "dùng thử",
+    "quyền lợi",
 ]
 
 # ── Selenium / WebDriver ──────────────────────────────────────────────────────
