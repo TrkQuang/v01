@@ -10,6 +10,8 @@ so callers can relay updates to Telegram in real time.
 
 import io
 import logging
+import os
+import random
 import re
 import shutil
 import time
