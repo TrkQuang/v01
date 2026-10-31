@@ -48,3 +48,4 @@ The platform outputs structured result codes based on evaluation evidence:
 | `PROMOTION_EXPIRED` | Hardware redemption deadline has passed. | Google One catalog marks campaign concluded. | Check official Google Store campaign dates. |
 | `MANUAL_REVIEW_REQUIRED` | Google triggered an interactive security challenge. | Redirect to accounts.google.com/challenge. | Authenticate directly in personal browser. |
 | `UNKNOWN` | Network or infrastructure anomaly prevented verification. | Timeout or unexpected HTTP response. | Re-run diagnostic probe. |
+

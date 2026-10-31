@@ -60,3 +60,4 @@ def test_diagnostic_session_cascade(test_db):
     assert saved_session is not None
     assert len(saved_session.results) == 1
     assert saved_session.results[0].check_name == "Hardware Check"
+

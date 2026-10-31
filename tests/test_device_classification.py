@@ -48,3 +48,4 @@ def test_unknown_environment_classification():
     evidence = DeviceEvidence(host_os="CustomOS", host_arch="arm", browser_detected=False, cdp_simulation_active=False)
     classification = service._determine_classification(evidence)
     assert classification == DeviceClassification.UNKNOWN
+

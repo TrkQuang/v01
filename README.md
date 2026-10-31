@@ -1,70 +1,111 @@
-# Pixel Promotion Research & Diagnostic Platform
+# Pixel Promotion Claim Assistant & Diagnostic Platform
 
-A Telegram-based research and diagnostic platform designed to analyze Google Pixel promotional eligibility (Google AI Pro / Gemini Advanced offers) and diagnose why browser-simulated and virtual environments fail to claim hardware-bound offers.
+A Telegram-based assistant and diagnostic platform designed to help owners of Google Pixel devices discover, evaluate, access, redeem, and verify official Google AI Pro / Gemini promotional offers through official, non-custodial workflows.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Capabilities
 
-| Capability | Technical Details |
+| Capability | Description |
 |---|---|
-| 📱 **Device Environment Diagnostics** | Classifies execution into `BROWSER_SIMULATION`, `ANDROID_EMULATOR`, `PHYSICAL_ANDROID`, or `VERIFIED_PIXEL`. Probes ADB, bootloader state, and Play Services. |
-| 🔬 **Eligibility Diagnostic Engine** | Evaluates promotional eligibility across 9 deterministic result codes (`OFFER_VISIBLE`, `DEVICE_NOT_VERIFIED`, `REGION_NOT_SUPPORTED`, `ACCOUNT_NOT_ELIGIBLE`, etc.). |
-| 🌍 **Country & Store Database** | ISO-3166 regional matrix detailing Google AI Pro and Google Pixel promotion support. |
-| 🔒 **Non-Custodial Architecture** | Never collects or stores Google account passwords, 2FA codes, recovery codes, or session tokens. |
-| 📊 **Persistent Audit & History** | SQLite (default) and PostgreSQL support via SQLAlchemy tracking diagnostic sessions and telemetry. |
-| 🤖 **Interactive Telegram Bot** | Modern Telegram UI with inline keyboards, live diagnostic sweeps, and structured reports. |
+| 🎯 **Guided Redemption Workflow** | Step-by-step 7-phase non-custodial claim assistant with deterministic state management (`/claim`). |
+| 📋 **Official Promotion Catalog** | Authoritative catalog of verified Google Pixel offers (Pixel 9 Pro 12M AI Premium, Pixel 9 6M) and unverified research targets (`/promotions`). |
+| 🛡️ **Non-Custodial Architecture** | Zero password/2FA harvesting. Generates official deep links and in-app instructions; all sensitive actions occur directly on official Google services. |
+| 📱 **Device Environment Diagnostics** | Classifies environments into `DESKTOP_BROWSER`, `BROWSER_MOBILE_EMULATION`, `ANDROID_EMULATOR`, `PHYSICAL_ANDROID`, or `VERIFIED_PIXEL`. Probes ADB, bootloader state, GMS, and Play Store (`/device`). |
+| 🔬 **Authoritative Eligibility Engine** | Comprehensive matrix checking device, country, Google account type, active subscriptions, payment methods, and redemption history (`/eligibility`). |
+| 🔍 **Redemption Verification** | Multi-tier evidence verification (direct verification or user-reported outcome classification) enforcing integrity (`/status`, `/history`). |
+| 📊 **Full Audit Trail & GDPR Erasure** | Structured audit logging with token/credential regex sanitization and one-click data deletion (`/cancel`). |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
 ```
 Telegram Bot (main.py)
         │
-        ├──> Device Diagnostic Service (device_diagnostics.py)
-        ├──> Promotion Diagnostic Engine (promotion_diagnostics.py)
-        ├──> Country Service (country_service.py)
-        ├──> Google Web Diagnostic Prober (google_automation.py)
+        ├──> User Session Manager (session_manager.py)
+        │         └──> State Machine (INIT -> IN_PROGRESS -> CLAIM_VERIFIED)
         │
-        └──> SQLAlchemy Storage (database.py) ──> SQLite / PostgreSQL
+        ├──> Promotion Discovery Service (promotion_service.py)
+        │         └──> Official Catalog (promotion_catalog.py)
+        │
+        ├──> Eligibility Evaluation Engine (eligibility_engine.py)
+        │         ├──> Country Service (country_service.py & countries.json)
+        │         └──> Account Guidance Flow (google_account_flow.py)
+        │
+        ├──> Device Verification Service (device_verification.py)
+        │         └──> ADB Hardware Prober & Environment Classifier
+        │
+        ├──> Redemption Workflow & Verification (redemption_workflow.py, redemption_verification.py)
+        │         └──> Assisted Non-Custodial Redemption Flow
+        │
+        └──> Audit & Storage Engine (audit_service.py & database.py)
+                  └──> SQLite / PostgreSQL via SQLAlchemy
 ```
 
-For detailed architectural diagrams and data flows, see [docs/architecture.md](docs/architecture.md).
+For complete architectural specifications, see [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## 🚀 Quickstart
+## 📱 Telegram Bot Commands
+
+| Command | Description |
+|---|---|
+| `/start` | Welcome screen, non-custodial security policy, and interactive main menu. |
+| `/claim` | Start a guided, 7-step promotional redemption workflow. |
+| `/promotions` | Browse official active Google Pixel promotional campaigns and research targets. |
+| `/account` | Check Google account readiness (Workspace check, Family Group conflicts, payment methods). |
+| `/device` | Diagnostic sweep of execution host, browser, ADB, and hardware attestation. |
+| `/eligibility` | Interactive country selector to test regional eligibility against Google Store terms. |
+| `/diagnose` | Comprehensive multi-tier diagnostic run (Device + Region + Web Prober). |
+| `/status` | Active claim session status, database health, and execution tier overview. |
+| `/history` | View your past claim sessions and eligibility check results. |
+| `/cancel` | Cancel active claim workflow and execute GDPR data erasure. |
+| `/help` | Detailed command manual and explanation of all diagnostic result codes. |
+
+---
+
+## 🚀 Quickstart Guide
 
 ### 1. Installation
 
 ```bash
 git clone https://github.com/TrkQuang/v01.git
 cd v01
+python -m venv .venv
+
+# On Linux / macOS:
+source .venv/bin/activate
+# On Windows PowerShell:
+.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 2. Configuration
 
-Set your Telegram Bot token:
+Copy the example environment template and configure your Telegram bot token:
 
 ```bash
-# On Linux / macOS / Replit Secrets:
-export TELEGRAM_BOT_TOKEN="your_bot_token_from_botfather"
-
-# On Windows PowerShell:
-$env:TELEGRAM_BOT_TOKEN="your_bot_token_from_botfather"
+cp .env.example .env
 ```
 
-### 3. Run Automated Tests
+Edit `.env`:
+```ini
+TELEGRAM_BOT_TOKEN="your_bot_token_from_botfather"
+DATABASE_URL="sqlite:///pixel_diagnostics.db"
+LOG_LEVEL="INFO"
+```
 
-Run the full pytest test suite (19 unit & integration tests):
+### 3. Automated Test Suite
+
+Run the full pytest test suite (40 unit and integration tests covering all 15 architecture phases):
 
 ```bash
 pytest tests -v
 ```
 
-### 4. Start the Platform
+### 4. Run the Bot
 
 ```bash
 python main.py
@@ -72,30 +113,17 @@ python main.py
 
 ---
 
-## 📱 Telegram Commands
+## 📚 Detailed Documentation
 
-| Command | Purpose |
-|---|---|
-| `/start` | Platform welcome message, privacy policy, and interactive menu. |
-| `/device` | Diagnostic sweep of execution host, browser, ADB, and hardware attestation. |
-| `/eligibility` | Interactive country selector to test regional eligibility against Google Store terms. |
-| `/diagnose` | Comprehensive multi-tier diagnostic run (Device + Region + Web Prober). |
-| `/status` | Platform health, active database, and execution tier overview. |
-| `/history` | View your past 5 diagnostic sessions and result codes. |
-| `/help` | Detailed manual and explanation of all diagnostic result codes. |
+- **[Deployment Guide](DEPLOYMENT.md)**: Production deployment instructions for Replit, Docker Compose, Linux VPS (systemd), and PostgreSQL.
+- **[Security & Trust Policy](SECURITY.md)**: Details on non-custodial principles, why automated Google sign-in is blocked, and GDPR erasure.
+- **[Promotional Campaigns Registry](PROMOTION_SOURCES.md)**: Verified Google Store terms, eligible models, and disclosure of unverified research targets.
+- **[Device Diagnostics & Hardware Attestation](docs/device-diagnostics.md)**: In-depth analysis of Titan M2 Keystore, Play Integrity, and emulator limitations.
+- **[Promotion Eligibility Engine](docs/promotion-eligibility.md)**: Decision trees and condition matrices for account and regional qualification.
 
 ---
 
-## 📚 Technical Documentation
-
-- [Device Diagnostics & Hardware Attestation](docs/device-diagnostics.md)
-- [Promotion Eligibility & Condition Matrix](docs/promotion-eligibility.md)
-- [Security & Non-Custodial Architecture](docs/security.md)
-- [System Architecture & Data Flows](docs/architecture.md)
-
----
-
-## ⚠️ Important Engineering Note
+## ⚠️ Important Engineering Notice
 
 Google Pixel promotional offers are **cryptographically hardware-bound**. Desktop browser simulations, User-Agent overrides (`Sec-CH-UA-Model`), and standard Android emulators cannot forge Titan M2 KeyStore attestation or Google Play Integrity tokens. 
 

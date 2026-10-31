@@ -57,3 +57,4 @@ A browser sending `Sec-CH-UA-Model: Pixel 11 Pro` or an Android emulator setting
 - Genuine manufacturer tags (`Google`).
 - Locked bootloader state (`ro.boot.flash.locked == 1` or `ro.boot.verifiedbootstate == green`).
 - Installed and certified Google Play Services (`com.google.android.gms`).
+

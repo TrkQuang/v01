@@ -42,3 +42,4 @@ def test_web_observation_security_challenge():
     finding = promotion_diagnostic_engine._check_web_observation("MANUAL_REVIEW_REQUIRED")
     assert finding.passed is False
     assert finding.result_code == DiagnosticResultCode.MANUAL_REVIEW_REQUIRED
+

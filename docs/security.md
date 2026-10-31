@@ -22,3 +22,4 @@ The Pixel Promotion Diagnostic Platform strictly adheres to non-custodial securi
 
 - **No Fake Hardware Claims**: The platform will never output fabricated success confirmations or claim that a simulated device redeemed a live Google promotion.
 - **No Attestation Bypass Exploits**: The platform does not implement or distribute exploits targeting Google Play Integrity or Titan M2 security chips. It serves purely as an engineering research and diagnostic platform.
+

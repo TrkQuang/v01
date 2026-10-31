@@ -54,3 +54,4 @@ Persistent Storage (database.py)
 4. **Promotion Evaluation**: `PromotionDiagnosticEngine` runs tests across hardware attestation, account eligibility, region, and payment requirements.
 5. **Persistence**: The diagnostic session, individual check findings, and telemetry are written to the database.
 6. **Delivery**: The Telegram user receives a structured breakdown with specific blocker codes and actionable next steps.
+

@@ -50,3 +50,4 @@ def test_personal_clean_account_eligible():
     )
     assert finding.passed is True
     assert finding.result_code == DiagnosticResultCode.OFFER_VISIBLE
+

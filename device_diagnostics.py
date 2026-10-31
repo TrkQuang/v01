@@ -206,3 +206,4 @@ class DeviceDiagnosticService:
 
 # Global instance
 device_diagnostic_service = DeviceDiagnosticService()
+
