@@ -247,10 +247,12 @@ async def check_offer(update: Update,
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "😔 No active Gemini Pro offer detected on this account.\n\n"
-                "The offer may not be available in your region or may have "
-                "already been activated. Try again later."
+                "😔 *Không tìm thấy gói ưu đãi Google One trên tài khoản này.*\n\n"
+                "• Gói ưu đãi Gemini Advanced 6 tháng cho Pixel 11 Pro có thể chưa áp dụng cho khu vực hiện tại.\n"
+                "• Hoặc tài khoản Google này đã từng kích hoạt/nhận khuyến mãi trước đó.\n"
+                "• Hãy thử lại với tài khoản Google mới hoặc kiểm tra VPN/vùng."
             ),
+            parse_mode="Markdown",
         )
 
 

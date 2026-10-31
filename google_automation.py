@@ -604,7 +604,7 @@ def _dismiss_google_popups(driver: webdriver.Chrome) -> int:
     """Dismiss Google One promo, mobile app promotion, and email update dialogs."""
     dismiss_keywords = [
         "để sau", "de sau", "không phải bây giờ", "khong phai bay gio",
-        "bỏ qua", "bo qua", "đóng", "dong", "hủy", "huy",
+        "bỏ qua", "bo qua", "đóng", "hủy",
         "maybe later", "not now", "no thanks", "dismiss", "skip", "close", "cancel",
         "later",
     ]
@@ -620,7 +620,7 @@ def _dismiss_google_popups(driver: webdriver.Chrome) -> int:
                 if not btn.is_displayed():
                     continue
                 txt = (btn.text or btn.get_attribute("aria-label") or "").strip().lower()
-                if any(kw == txt or kw in txt for kw in accept_cookies):
+                if any(kw == txt or (len(kw) > 4 and kw in txt) for kw in accept_cookies):
                     driver.execute_script("arguments[0].click();", btn)
                     dismissed += 1
                     found = True
@@ -635,7 +635,7 @@ def _dismiss_google_popups(driver: webdriver.Chrome) -> int:
                 if not btn.is_displayed():
                     continue
                 txt = (btn.text or btn.get_attribute("aria-label") or "").strip().lower()
-                if any(kw == txt or kw in txt for kw in dismiss_keywords):
+                if txt in dismiss_keywords or any(kw == txt or (len(kw) > 3 and kw in txt) for kw in dismiss_keywords):
                     driver.execute_script("arguments[0].click();", btn)
                     dismissed += 1
                     found = True
@@ -671,45 +671,63 @@ def _dismiss_google_popups(driver: webdriver.Chrome) -> int:
 
 
 def _extract_payment_link(driver: webdriver.Chrome) -> Optional[str]:
-    """Scan current page for a Gemini / Google One Pixel offer link."""
-    keywords = config.GEMINI_OFFER_KEYWORDS
-    url_pat = re.compile(
-        r"(gemini|bard|upgrade|activate|offer|redeem|trial|checkout|benefits)",
-        re.IGNORECASE,
-    )
+    """
+    Scan current page for a Gemini / Google One Pixel offer link.
+    Prioritizes specific benefit links (BARD_ADVANCED_MODE, TIER0, Gemini Advanced).
+    Never returns generic pages (storage, home, support, etc.).
+    """
+    excluded = [
+        "storage", "management", "support.google.com", "policies.google.com",
+        "accounts.google.com", "mail.google.com", "drive.google.com",
+        "photos.google.com", "play.google.com/store/apps/details",
+    ]
 
     all_links = driver.find_elements(By.TAG_NAME, "a")
+    candidates = []
 
     for link in all_links:
         try:
-            text = (link.text + " " + (link.get_attribute("aria-label") or "")).lower()
-            href = link.get_attribute("href") or ""
-            if any(kw in text for kw in keywords) and href:
-                return href
+            href = (link.get_attribute("href") or "").strip()
+            if not href or any(ex in href.lower() for ex in excluded):
+                continue
+
+            text = (link.text + " " + (link.get_attribute("aria-label") or "")).strip().lower()
+            href_lower = href.lower()
+
+            # Priority 1: Direct Gemini / Bard Pixel hardware benefit link
+            if "bard_advanced" in href_lower or "tier0" in href_lower or "bard_advanced_mode" in href_lower:
+                return href  # Instant match, best possible link!
+
+            # Priority 2: Benefits detail link with offer keywords
+            if "/benefits/" in href_lower and any(kw in href_lower or kw in text for kw in [
+                "gemini", "bard", "advanced", "pro", "ai", "offer", "trial", "uudai", "uu dai", "quyen loi"
+            ]):
+                candidates.append((20, href))
+                continue
+
+            # Priority 3: Text explicitly mentions Gemini Advanced / Pixel offer / free trial
+            if any(kw in text for kw in [
+                "gemini advanced", "gemini pro", "bard advanced",
+                "6 tháng", "12 tháng", "6 month", "12 month", "6-month", "12-month",
+                "dùng thử 0", "dùng thử miễn phí", "free trial", "nhận ưu đãi", "claim offer"
+            ]):
+                candidates.append((10, href))
+                continue
+
+            # Priority 4: Link contains offer/checkout/subscribe/benefit
+            if any(kw in href_lower for kw in ["checkout", "subscribe", "upgrade", "redeem"]):
+                candidates.append((5, href))
+                continue
+
+            if "/benefits/" in href_lower:
+                candidates.append((3, href))
+
         except Exception:
             continue
 
-    for link in all_links:
-        try:
-            href = link.get_attribute("href") or ""
-            if url_pat.search(href):
-                return href
-        except Exception:
-            continue
-
-    for btn in driver.find_elements(By.CSS_SELECTOR, "button, [role='button']"):
-        try:
-            if any(kw in btn.text.lower() for kw in keywords):
-                try:
-                    parent = btn.find_element(By.XPATH, "ancestor::a")
-                    href = parent.get_attribute("href") or ""
-                    if href:
-                        return href
-                except NoSuchElementException:
-                    pass
-                return driver.current_url
-        except Exception:
-            continue
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
 
     return None
 
@@ -724,52 +742,88 @@ def _auto_claim_offer(driver: webdriver.Chrome, offer_link: str,
         _report(cb, f"🎁 Opening offer page to activate:\n🔗 {offer_link}", driver)
         if driver.current_url != offer_link:
             driver.get(offer_link)
-            time.sleep(3)
+            time.sleep(3.5)
 
         # Clear any overlay popups on the offer page
         _dismiss_google_popups(driver)
 
-        # Keywords for the primary Claim / Redeem / Activate button
-        claim_keywords = [
-            # Vietnamese
-            "nhận ưu đãi", "đổi ưu đãi", "nhận quyền lợi", "bắt đầu dùng thử",
-            "nhận gói", "bắt đầu", "nâng cấp", "kích hoạt", "đăng ký", "tiếp tục",
-            # English
-            "claim offer", "get offer", "get perk", "redeem", "start trial",
-            "get started", "upgrade", "subscribe", "continue", "activate",
-        ]
+        # JS clicker for Claim button
+        claim_result = driver.execute_script(
+            """
+            var keywords = [
+                'nhận ưu đãi', 'đổi ưu đãi', 'nhận quyền lợi', 'bắt đầu dùng thử',
+                'bắt đầu dùng thử 0', 'dùng thử 0', 'nhận gói', 'kích hoạt', 'nâng cấp',
+                'claim offer', 'get offer', 'get perk', 'redeem', 'start trial',
+                'get started', 'upgrade', 'subscribe', 'continue', 'activate'
+            ];
+            var els = document.querySelectorAll('button, [role="button"], a.VfPpkd-LgbsSe, a');
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                if (el.offsetParent === null) continue;
+                var text = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').toLowerCase().trim();
+                for (var k = 0; k < keywords.length; k++) {
+                    if (text === keywords[k] || text.includes(keywords[k])) {
+                        el.scrollIntoView({block: 'center'});
+                        el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+                        el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+                        el.click();
+                        return {clicked: true, text: text};
+                    }
+                }
+            }
+            return {clicked: false};
+            """
+        )
 
-        clicked_claim = False
-        for kw in claim_keywords:
-            clicked_claim = (
-                _click_element_by_inner_text(driver, kw, tag="button")
-                or _click_element_by_inner_text(driver, kw, tag="a")
-                or _click_element_by_inner_text(driver, kw, tag="div")
-            )
-            if clicked_claim:
-                _report(cb, f"🎁 Clicked claim button ('{kw}'), waiting for confirmation sheet…", driver)
-                time.sleep(3.5)
-                break
+        if claim_result and claim_result.get("clicked"):
+            btn_text = claim_result.get("text", "")
+            _report(cb, f"🎁 Clicked claim button ('{btn_text}'), waiting for confirmation sheet…", driver)
+            time.sleep(4)
+        else:
+            # Fallback Python clicker
+            claim_keywords = [
+                "nhận ưu đãi", "đổi ưu đãi", "nhận quyền lợi", "bắt đầu dùng thử",
+                "claim offer", "get offer", "get perk", "redeem", "start trial",
+            ]
+            for kw in claim_keywords:
+                if _click_element_by_inner_text(driver, kw, tag="button") or _click_element_by_inner_text(driver, kw, tag="a"):
+                    _report(cb, f"🎁 Clicked claim button ('{kw}'), waiting for confirmation sheet…", driver)
+                    time.sleep(4)
+                    break
 
-        # Check for secondary confirmation sheet (e.g. Subscribe / Start trial bottom sheet)
+        # Dismiss any secondary popup or prompt
         _dismiss_google_popups(driver)
-        confirm_keywords = [
-            # Vietnamese
-            "bắt đầu dùng thử", "đăng ký", "đồng ý", "xác nhận", "tiếp tục", "chấp nhận",
-            # English
-            "start trial", "subscribe", "agree", "confirm", "continue", "accept",
-        ]
 
-        clicked_confirm = False
-        for kw in confirm_keywords:
-            clicked_confirm = (
-                _click_element_by_inner_text(driver, kw, tag="button")
-                or _click_element_by_inner_text(driver, kw, tag="div")
-            )
-            if clicked_confirm:
-                _report(cb, f"💳 Clicked confirmation ('{kw}')…", driver)
-                time.sleep(4)
-                break
+        # JS clicker for Confirmation button (bottom sheet / Google Play checkout)
+        confirm_result = driver.execute_script(
+            """
+            var confirmKw = [
+                'bắt đầu dùng thử', 'đăng ký', 'xác nhận', 'đồng ý', 'tiếp tục', 'chấp nhận',
+                'start trial', 'subscribe', 'agree', 'confirm', 'continue', 'accept'
+            ];
+            var els = document.querySelectorAll('button, [role="button"], a.VfPpkd-LgbsSe, a');
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                if (el.offsetParent === null) continue;
+                var text = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').toLowerCase().trim();
+                for (var k = 0; k < confirmKw.length; k++) {
+                    if (text === confirmKw[k] || text.includes(confirmKw[k])) {
+                        el.scrollIntoView({block: 'center'});
+                        el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+                        el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+                        el.click();
+                        return {clicked: true, text: text};
+                    }
+                }
+            }
+            return {clicked: false};
+            """
+        )
+
+        if confirm_result and confirm_result.get("clicked"):
+            c_text = confirm_result.get("text", "")
+            _report(cb, f"💳 Clicked confirmation ('{c_text}')…", driver)
+            time.sleep(4.5)
 
         # Analyze current page status after attempting claim
         page_src = driver.page_source.lower()
@@ -786,8 +840,8 @@ def _auto_claim_offer(driver: webdriver.Chrome, offer_link: str,
         ]
         if any(kw in body_text for kw in payment_needed_keywords):
             _report(cb, (
-                "💳 Google requires adding a payment method (Card / MoMo) to complete the 0đ trial activation.\n"
-                f"🔗 Please complete payment setup at:\n{driver.current_url or offer_link}"
+                "💳 Google yêu cầu thêm phương thức thanh toán (Thẻ / MoMo) để hoàn tất kích hoạt gói 0đ.\n"
+                f"🔗 Link hoàn tất:\n{driver.current_url or offer_link}"
             ), driver)
             return True
 
@@ -798,8 +852,8 @@ def _auto_claim_offer(driver: webdriver.Chrome, offer_link: str,
         ]
         if any(kw in body_text for kw in success_keywords):
             _report(cb, (
-                "🎉 Google One (Gemini Advanced) package activated successfully!\n"
-                f"📍 Status: Active\n"
+                "🎉 Gói Google One (Gemini Advanced 6 tháng) đã được kích hoạt thành công!\n"
+                f"📍 Trạng thái: Hoạt động\n"
                 f"🔗 {driver.current_url}"
             ), driver)
             return True
@@ -818,8 +872,9 @@ def _navigate_google_one(driver: webdriver.Chrome,
                          cb: ProgressCB = None) -> Optional[str]:
     """Navigate Google One pages, detect offer, and automatically claim it."""
     urls = [
-        config.GOOGLE_ONE_URL,
         getattr(config, "GOOGLE_ONE_BENEFITS_URL", "https://one.google.com/benefits"),
+        getattr(config, "GOOGLE_ONE_DIRECT_OFFER_URL", "https://one.google.com/benefits/LOCKED:BARD_ADVANCED_MODE:BENEFIT_OFFERING_MEMBER:IN:TIER0?from=1"),
+        config.GOOGLE_ONE_URL,
         config.GOOGLE_ONE_OFFERS_URL,
     ]
 
@@ -828,12 +883,20 @@ def _navigate_google_one(driver: webdriver.Chrome,
         try:
             _report(cb, f"🔍 Step 6/6 — Scanning: {url}", driver)
             driver.get(url)
-            time.sleep(3)
+            time.sleep(3.5)
 
             # Dismiss popups / cookie notices (e.g. "Để sau", "Chấp nhận tất cả")
             dismissed = _dismiss_google_popups(driver)
             if dismissed:
                 time.sleep(1)
+
+            # Check if current page itself is already the benefit / offer page
+            current_url = driver.current_url
+            curr_lower = current_url.lower()
+            if "bard_advanced" in curr_lower or "tier0" in curr_lower or "locked:bard" in curr_lower:
+                _report(cb, f"🎯 Direct offer page loaded!\n🔗 {current_url}", driver)
+                found_link = current_url
+                break
 
             _report(cb, "🔎 Searching page for Gemini / Google One offer links…", driver)
             link = _extract_payment_link(driver)

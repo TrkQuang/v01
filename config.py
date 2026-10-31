@@ -58,9 +58,10 @@ USER_AGENT_TEMPLATES = [
 # NOTE: accounts.google.com/ServiceLogin?hl=en avoids high-risk service check
 # that triggers "This browser or app may not be secure" block.
 GMAIL_LOGIN_URL         = "https://accounts.google.com/ServiceLogin?hl=en"
-GOOGLE_ONE_URL          = "https://one.google.com/"
-GOOGLE_ONE_BENEFITS_URL = "https://one.google.com/benefits"
-GOOGLE_ONE_OFFERS_URL   = "https://one.google.com/about/plans"
+GOOGLE_ONE_BENEFITS_URL     = "https://one.google.com/benefits"
+GOOGLE_ONE_DIRECT_OFFER_URL = "https://one.google.com/benefits/LOCKED:BARD_ADVANCED_MODE:BENEFIT_OFFERING_MEMBER:IN:TIER0?from=1"
+GOOGLE_ONE_URL              = "https://one.google.com/"
+GOOGLE_ONE_OFFERS_URL       = "https://one.google.com/about/plans"
 
 # ── Gemini / Google One Pixel offer detection keywords ──────────────────────
 GEMINI_OFFER_KEYWORDS = [
