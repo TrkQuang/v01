@@ -455,7 +455,7 @@ def _handle_2fa(driver: webdriver.Chrome, totp_secret: str,
     'Try another way', select Google Authenticator, and submit the 6-digit TOTP code.
     """
     for attempt in range(1, 8):
-        time.sleep(2)
+        time.sleep(random.uniform(2.5, 3.5))
         current_url = driver.current_url
         parsed = urlparse(current_url)
         hostname = parsed.hostname or ""
@@ -482,12 +482,12 @@ def _handle_2fa(driver: webdriver.Chrome, totp_secret: str,
                 new_path = urlparse(driver.current_url).path
                 if "wrong code" in new_src or "wrong number of digits" in new_src:
                     _report(cb, "⚠️ Code rejected, retrying with next code…", driver)
-                    time.sleep(2)
+                    time.sleep(random.uniform(2.5, 3.5))
                     continue
                 if "signin" not in new_path and "challenge" not in new_path:
                     _report(cb, "✅ Step 4 — 2FA verified successfully!", driver)
                     return True
-                time.sleep(2)
+                time.sleep(random.uniform(2.5, 3.5))
                 continue
 
         # 2. Are we on the Method Selection page (list of 2FA options)?
@@ -534,7 +534,7 @@ def _gmail_login(driver: webdriver.Chrome, email: str, password: str,
         # ── Step 1: Load login page ───────────────────────────────────────────
         _report(cb, "🌐 Step 1/6 — Loading Google sign-in page…", driver)
         driver.get(config.GMAIL_LOGIN_URL)
-        time.sleep(2)
+        time.sleep(random.uniform(2.5, 3.5))
 
         # ── Step 2: Enter email ───────────────────────────────────────────────
         _report(cb, f"📧 Step 2/6 — Entering email: {email}", driver)

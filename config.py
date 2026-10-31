@@ -45,7 +45,7 @@ USER_AGENT_TEMPLATES = [
 ]
 
 # ── Google URLs ───────────────────────────────────────────────────────────────
-GMAIL_LOGIN_URL       = "https://accounts.google.com/ServiceLogin?hl=en"
+GMAIL_LOGIN_URL       = "https://accounts.google.com/ServiceLogin?service=googleone&continue=https%3A%2F%2Fone.google.com%2F&hl=en"
 GOOGLE_ONE_URL        = "https://one.google.com/"
 GOOGLE_ONE_OFFERS_URL = "https://one.google.com/about/plans"
 
