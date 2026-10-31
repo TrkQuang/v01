@@ -253,8 +253,10 @@ def _find_totp_field(driver: webdriver.Chrome):
     Returns None if the page is asking for a 10-digit Android Settings security code.
     """
     src = driver.page_source.lower()
-    # If the page asks for 10-digit Android Security Code, it is NOT the Authenticator app!
-    if ("security code" in src and ("settings app" in src or "settings" in src)) or "get your android" in src:
+    path = urlparse(driver.current_url).path
+
+    # If currently on the ootp (10-digit offline security code) challenge page, do NOT match it as TOTP!
+    if "ootp" in path or ("security code" in src and ("settings app" in src or "settings" in src)) or "get your android" in src:
         return None
 
     for inp in driver.find_elements(By.CSS_SELECTOR, "input"):
@@ -268,15 +270,13 @@ def _find_totp_field(driver: webdriver.Chrome):
             itype = (inp.get_attribute("type") or "").lower()
             iac = (inp.get_attribute("autocomplete") or "").lower()
 
-            # Exact match for Authenticator field
             if "totp" in iname or "totp" in iid or iname == "totppin" or iid == "totppin":
                 return inp
             if iac == "one-time-code":
                 return inp
             if "pin" in iname and "security" not in iname:
                 return inp
-            # If the page mentions Authenticator and has a numeric/tel input
-            if itype in ("tel", "number", "text") and ("authenticator" in src):
+            if itype in ("tel", "number", "text") and ("authenticator" in src or "totp" in path):
                 return inp
         except Exception:
             continue
@@ -322,71 +322,117 @@ def _enter_totp(driver: webdriver.Chrome, totp_secret: str,
 def _click_authenticator_option(driver: webdriver.Chrome,
                                 cb: ProgressCB = None) -> bool:
     """Click the Authenticator app option on Google's method-selection page."""
+    # Method 1: Target via Selenium XPath
+    xpaths = [
+        "//*[@data-challengetype='6']",
+        "//li[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator')]",
+        "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator') and (@role='button' or @role='link')]",
+        "//li[.//span[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator')]]",
+        "//li[.//div[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator')]]",
+    ]
+    for xp in xpaths:
+        try:
+            for el in driver.find_elements(By.XPATH, xp):
+                if el.is_displayed():
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+                    time.sleep(0.2)
+                    try:
+                        el.click()
+                        _report(cb, "✅ Clicked Authenticator option via XPath", driver)
+                        return True
+                    except Exception:
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        ActionChains(driver).move_to_element(el).pause(0.2).click().perform()
+                        _report(cb, "✅ Clicked Authenticator option via ActionChains", driver)
+                        return True
+        except Exception:
+            continue
+
+    # Method 2: Comprehensive JS query and event dispatch
     result = driver.execute_script(
         """
         // Strategy A: data-challengetype="6" = TOTP (Google Authenticator).
-        var directEl = document.querySelector('[data-action="selectchallenge"][data-challengetype="6"]');
+        var directEl = document.querySelector('[data-action="selectchallenge"][data-challengetype="6"], [data-challengetype="6"]');
         if (directEl && directEl.offsetParent !== null) {
+            directEl.scrollIntoView({block: 'center'});
             directEl.click();
             return 'direct_challengetype6';
         }
 
-        // Strategy B: Any element with data-challengetype="6"
-        var any6 = document.querySelector('[data-challengetype="6"]');
-        if (any6 && any6.offsetParent !== null) {
-            any6.click();
-            return 'any_challengetype6';
-        }
-
-        // Strategy C: find <li> or interactive element whose innerText contains "authenticator"
+        // Strategy B: find li or interactive element containing 'authenticator'
         var items = document.querySelectorAll('li, [role="link"], [role="button"], [role="option"], [data-action="selectchallenge"]');
         for (var i = 0; i < items.length; i++) {
-            var t = (items[i].innerText || items[i].textContent || '').toLowerCase();
+            var item = items[i];
+            var t = (item.innerText || item.textContent || '').toLowerCase();
             if ((t.includes('authenticator') || t.includes('xác minh từ ứng dụng') || t.includes('authenticator app'))
-                    && items[i].offsetParent !== null) {
-                var child = items[i].querySelector('a, button, [role="button"], [role="link"], div');
+                    && item.offsetParent !== null) {
+                item.scrollIntoView({block: 'center'});
+                var child = item.querySelector('a, button, [role="button"], [role="link"], div');
                 if (child) {
                     child.click();
-                    return 'item_child_click:' + child.tagName;
+                    return 'item_child:' + child.tagName;
                 }
-                items[i].click();
-                return 'item_click:' + items[i].tagName;
+                item.click();
+                return 'item:' + item.tagName;
             }
         }
         return 'not_found';
         """
     )
-    _report(cb, f"🔍 Authenticator option click: {result}", driver)
-    if result and result != "not_found":
-        return True
-
-    # Selenium XPath fallback
-    try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator')]"
-        for el in driver.find_elements(By.XPATH, xpath):
-            if el.is_displayed() and el.tag_name in ("li", "a", "button", "div", "span"):
-                ActionChains(driver).move_to_element(el).click(el).perform()
-                _report(cb, "✅ Clicked Authenticator option via ActionChains", driver)
-                return True
-    except Exception as e:
-        _report(cb, f"⚠️ ActionChains fallback failed: {e}", driver)
-
-    return False
+    _report(cb, f"🔍 Authenticator option click result: {result}", driver)
+    return result != "not_found"
 
 
 def _click_try_another_way(driver: webdriver.Chrome) -> bool:
     """Click the 'Try another way' link/button. Returns True on success."""
+    xpaths = [
+        "//span[normalize-space(text())='Try another way']",
+        "//button[.//span[contains(text(), 'Try another way')]]",
+        "//button[contains(., 'Try another way')]",
+        "//a[contains(., 'Try another way')]",
+        "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'try another way')]",
+        "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'thử cách khác')]",
+    ]
+
+    for xp in xpaths:
+        try:
+            elements = driver.find_elements(By.XPATH, xp)
+            for el in elements:
+                if el.is_displayed():
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+                    time.sleep(0.2)
+                    try:
+                        el.click()
+                        return True
+                    except Exception:
+                        pass
+        except Exception:
+            continue
+
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        for xp in xpaths[:3]:
+            for el in driver.find_elements(By.XPATH, xp):
+                if el.is_displayed():
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+                    ActionChains(driver).move_to_element(el).pause(0.2).click().perform()
+                    return True
+    except Exception:
+        pass
+
     try:
         res = driver.execute_script(
             """
-            var els = document.querySelectorAll('button, a, [role="button"], span, div');
-            for (var i = 0; i < els.length; i++) {
-                var el = els[i];
+            var candidates = document.querySelectorAll('button, a, span, div[role="button"]');
+            for (var i = 0; i < candidates.length; i++) {
+                var el = candidates[i];
                 var t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                if ((t === 'try another way' || t.includes('try another way') || t.includes('thử cách khác'))
-                        && el.offsetParent !== null) {
-                    el.click();
+                if (t === 'try another way' || t.includes('try another way') || t.includes('thử cách khác')) {
+                    var btn = el.closest('button') || el.closest('a') || el;
+                    btn.scrollIntoView({block: 'center'});
+                    btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+                    btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+                    btn.click();
                     return true;
                 }
             }
@@ -398,15 +444,6 @@ def _click_try_another_way(driver: webdriver.Chrome) -> bool:
     except Exception:
         pass
 
-    try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        for el in driver.find_elements(By.CSS_SELECTOR, "button, a, [role='button'], span, div"):
-            t = (el.text or el.get_attribute("innerText") or "").lower()
-            if "try another way" in t and el.is_displayed():
-                ActionChains(driver).move_to_element(el).click(el).perform()
-                return True
-    except Exception:
-        pass
     return False
 
 
@@ -417,7 +454,7 @@ def _handle_2fa(driver: webdriver.Chrome, totp_secret: str,
     Security Code (10-digit from Android settings), or g.co/sc code, click
     'Try another way', select Google Authenticator, and submit the 6-digit TOTP code.
     """
-    for loop_count in range(1, 7):
+    for attempt in range(1, 8):
         time.sleep(2)
         current_url = driver.current_url
         parsed = urlparse(current_url)
@@ -427,60 +464,49 @@ def _handle_2fa(driver: webdriver.Chrome, totp_secret: str,
         # Check if already logged in past 2FA
         if ("accounts.google.com" not in hostname
                 or hostname == "myaccount.google.com"
-                or (hostname.endswith(".google.com") and "/u/" in path and "signin" not in path)):
+                or (hostname.endswith(".google.com") and "/u/" in path and "signin" not in path and "challenge" not in path)):
             _report(cb, "✅ Step 4/6 — 2FA passed, logged in!", driver)
             return True
 
         src = driver.page_source.lower()
-        _report(cb, f"🔐 Step 4/6 (Attempt {loop_count}) — 2FA page\n📍 {path}", driver)
+        _report(cb, f"🔐 Step 4/6 (Attempt {attempt}) — 2FA checkpoint\n📍 {path}", driver)
 
-        # Detect non-Authenticator challenges:
-        # 1. 10-digit Security code from Android settings
-        is_security_code = ("security code" in src and ("settings app" in src or "settings" in src)) or "get your android" in src
-        # 2. Prompt on phone / tablet
-        is_phone_prompt = "check your phone" in src or "tap yes" in src or "notification sent" in src
-        # 3. g.co/sc page
-        is_gco_sc = "g.co/sc" in src
-        # 4. Error from previous wrong input (like 10-digit code entered into wrong field)
-        is_wrong_digits = "wrong number of digits" in src
-
-        has_try_another_way = "try another way" in src or "thử cách khác" in src
+        # 1. Are we on the Authenticator TOTP input screen?
         totp_input = _find_totp_field(driver)
-
-        # CASE 1: Non-Authenticator challenge on screen OR wrong digits -> MUST click "Try another way"
-        if has_try_another_way and (is_security_code or is_phone_prompt or is_gco_sc or is_wrong_digits or (not totp_input and "authenticator" not in src)):
-            reason = "Security code" if is_security_code else ("Phone prompt" if is_phone_prompt else ("g.co/sc" if is_gco_sc else "Other verification"))
-            _report(cb, f"🔄 Step 4 — Non-Authenticator challenge ({reason}). Clicking 'Try another way'…", driver)
-            clicked = _click_try_another_way(driver)
-            time.sleep(2.5)
-            continue
-
-        # CASE 2: Selection page (list of 2FA methods) -> pick Google Authenticator
-        if ("authenticator" in src) and not totp_input:
-            _report(cb, "🔍 Step 4 — Method selection page. Selecting 'Google Authenticator'…", driver)
-            picked = _click_authenticator_option(driver, cb)
-            time.sleep(2.5)
-            continue
-
-        # CASE 3: Authenticator 6-digit input is visible!
-        if totp_input:
-            _report(cb, "🔑 Step 4 — Google Authenticator input detected. Entering 6-digit code…", driver)
+        if totp_input and ("authenticator" in src or "totp" in path or "totp" in (totp_input.get_attribute("name") or "").lower()):
+            _report(cb, "🔑 Step 4 — Google Authenticator 6-digit input detected. Entering code…", driver)
             submitted = _enter_totp(driver, totp_secret, cb)
             if submitted:
                 time.sleep(3.5)
-                src_after = driver.page_source.lower()
-                if "wrong code" in src_after or "wrong number of digits" in src_after:
+                new_src = driver.page_source.lower()
+                new_path = urlparse(driver.current_url).path
+                if "wrong code" in new_src or "wrong number of digits" in new_src:
                     _report(cb, "⚠️ Code rejected, retrying with next code…", driver)
                     time.sleep(2)
                     continue
-                return True
-            else:
-                _report(cb, "⚠️ Failed to submit TOTP code", driver)
+                if "signin" not in new_path and "challenge" not in new_path:
+                    _report(cb, "✅ Step 4 — 2FA verified successfully!", driver)
+                    return True
+                time.sleep(2)
+                continue
 
-        # Fallback if try another way is still there
+        # 2. Are we on the Method Selection page (list of 2FA options)?
+        is_selection_page = "selection" in path or ("authenticator" in src and not totp_input)
+        if is_selection_page:
+            _report(cb, "🔍 Step 4 — Method selection list detected. Selecting 'Google Authenticator'…", driver)
+            picked = _click_authenticator_option(driver, cb)
+            time.sleep(3)
+            continue
+
+        # 3. Are we on a Non-Authenticator Challenge (Security code / ootp / prompt / etc.)?
+        has_try_another_way = "try another way" in src or "thử cách khác" in src
         if has_try_another_way:
-            _click_try_another_way(driver)
-            time.sleep(2)
+            reason = "Security code (ootp)" if "ootp" in path or "security code" in src else "Device verification"
+            _report(cb, f"🔄 Step 4 — {reason} screen detected. Clicking 'Try another way'…", driver)
+            clicked = _click_try_another_way(driver)
+            _report(cb, f"{'✅' if clicked else '⚠️'} Clicked 'Try another way', waiting for method list…", driver)
+            time.sleep(3)
+            continue
 
     return False
 
@@ -537,7 +563,12 @@ def _gmail_login(driver: webdriver.Chrome, email: str, password: str,
         # ── Step 4: 2FA / TOTP ────────────────────────────────────────────────
         if totp_secret:
             _report(cb, "🔐 Step 4/6 — Checking for 2FA challenge…", driver)
-            _handle_2fa(driver, totp_secret, cb)
+            ok_2fa = _handle_2fa(driver, totp_secret, cb)
+            if not ok_2fa:
+                current_path = urlparse(driver.current_url).path
+                if "challenge" in current_path or "signin" in current_path:
+                    _report(cb, "❌ Step 4/6 — 2FA was not completed. Please check your TOTP secret or 2FA methods.", driver)
+                    return False
 
         # ── Step 5: Verify login ──────────────────────────────────────────────
         current_url = driver.current_url
@@ -559,23 +590,23 @@ def _gmail_login(driver: webdriver.Chrome, email: str, password: str,
             pass
 
         if (hostname == "myaccount.google.com"
-                or (hostname.endswith(".google.com") and "/u/" in path)):
+                or (hostname.endswith(".google.com") and "/u/" in path and "signin" not in path and "challenge" not in path)):
             _report(cb, "✅ Step 5/6 — Logged in successfully!", driver)
             return True
 
-        if not (hostname == "accounts.google.com"
-                and path.startswith("/signin")):
+        # If still on accounts.google.com challenge or signin, it is NOT logged in!
+        if hostname == "accounts.google.com" and ("signin" in path or "challenge" in path or "rejected" in path):
             _report(cb,
-                    f"✅ Step 5/6 — Login appears successful\n"
+                    f"❌ Step 5/6 — Still on verification/sign-in page\n"
                     f"📍 URL: {current_url[:80]}",
                     driver)
-            return True
+            return False
 
         _report(cb,
-                f"❌ Step 5/6 — Still on sign-in page after login\n"
+                f"✅ Step 5/6 — Login appears successful\n"
                 f"📍 URL: {current_url[:80]}",
                 driver)
-        return False
+        return True
 
     except TimeoutException as exc:
         _report(cb, f"⏱️ Timeout during login: {exc}", driver)
