@@ -247,53 +247,73 @@ def _click_element_by_inner_text(driver: webdriver.Chrome,
     return False
 
 
-def _enter_totp(driver: webdriver.Chrome, totp_secret: str,
-                cb: ProgressCB = None) -> bool:
-    """Generate a fresh TOTP code and fill it into the visible input. Returns True on submit."""
-    code = _generate_totp(totp_secret)
-    secs_left = 30 - (int(time.time()) % 30)
-    _report(cb, f"🔢 Entering TOTP code: `{code}` ({secs_left}s remaining)", driver)
+def _find_totp_field(driver: webdriver.Chrome):
+    """
+    Find ONLY the real 6-digit Google Authenticator input field.
+    Returns None if the page is asking for a 10-digit Android Settings security code.
+    """
+    src = driver.page_source.lower()
+    # If the page asks for 10-digit Android Security Code, it is NOT the Authenticator app!
+    if ("security code" in src and ("settings app" in src or "settings" in src)) or "get your android" in src:
+        return None
 
-    # Find the visible TOTP input field
-    totp_field = None
     for inp in driver.find_elements(By.CSS_SELECTOR, "input"):
         try:
             if (inp.get_attribute("aria-hidden") or "").lower() == "true":
                 continue
-            itype = (inp.get_attribute("type") or "").lower()
+            if not inp.is_displayed():
+                continue
             iname = (inp.get_attribute("name") or "").lower()
+            iid = (inp.get_attribute("id") or "").lower()
+            itype = (inp.get_attribute("type") or "").lower()
             iac = (inp.get_attribute("autocomplete") or "").lower()
-            if (itype in ("tel", "number") or "pin" in iname
-                    or "totp" in iname or "one-time" in iac
-                    or "security" in iname):
-                totp_field = inp
-                break
-            # fallback: any visible non-hidden text input
-            if itype == "text" and inp.is_displayed():
-                totp_field = inp
+
+            # Exact match for Authenticator field
+            if "totp" in iname or "totp" in iid or iname == "totppin" or iid == "totppin":
+                return inp
+            if iac == "one-time-code":
+                return inp
+            if "pin" in iname and "security" not in iname:
+                return inp
+            # If the page mentions Authenticator and has a numeric/tel input
+            if itype in ("tel", "number", "text") and ("authenticator" in src):
+                return inp
         except Exception:
             continue
+    return None
 
+
+def _enter_totp(driver: webdriver.Chrome, totp_secret: str,
+                cb: ProgressCB = None) -> bool:
+    """Generate a fresh TOTP code and fill it into the visible input. Returns True on submit."""
+    totp_field = _find_totp_field(driver)
     if not totp_field:
-        _report(cb, "⚠️ TOTP input field not found on this page", driver)
+        _report(cb, "⚠️ Google Authenticator 6-digit input field not found on this page", driver)
         return False
 
-    totp_field.clear()
-    totp_field.send_keys(code)
+    code = _generate_totp(totp_secret)
+    secs_left = 30 - (int(time.time()) % 30)
+    _report(cb, f"🔢 Entering TOTP code: `{code}` ({secs_left}s remaining)", driver)
+
+    _human_type(totp_field, code)
     time.sleep(0.5)
 
     # Submit
     for sid in ["totpNext", "passwordNext"]:
         try:
-            driver.find_element(By.ID, sid).click()
-            return True
+            btn = driver.find_element(By.ID, sid)
+            if btn.is_displayed():
+                btn.click()
+                return True
         except NoSuchElementException:
             continue
     try:
-        driver.find_element(
-            By.CSS_SELECTOR, 'button[type="submit"], [jsname="LgbsSe"]'
-        ).click()
-        return True
+        btn = driver.find_element(
+            By.CSS_SELECTOR, 'button[type="submit"], [jsname="LgbsSe"], button[type="button"]'
+        )
+        if btn.is_displayed():
+            btn.click()
+            return True
     except NoSuchElementException:
         pass
     return False
@@ -301,76 +321,54 @@ def _enter_totp(driver: webdriver.Chrome, totp_secret: str,
 
 def _click_authenticator_option(driver: webdriver.Chrome,
                                 cb: ProgressCB = None) -> bool:
-    """
-    Click the Authenticator app option on Google's method-selection page.
-
-    The <li> elements have no jsaction. The real click handler is on a child
-    <div> or <a> INSIDE the authenticator <li>. Strategy:
-      1. Find the <li> whose innerText contains "authenticator"
-      2. Look INSIDE it for any jsaction child, <a>, or <button>
-      3. If none, click the first <div> child (Google wraps options in divs)
-      4. Last resort: plain .click() + dispatchEvent on the <li> itself
-    """
+    """Click the Authenticator app option on Google's method-selection page."""
     result = driver.execute_script(
         """
         // Strategy A: data-challengetype="6" = TOTP (Google Authenticator).
-        // Do NOT use data-challengeid — it is not unique and matches other options.
         var directEl = document.querySelector('[data-action="selectchallenge"][data-challengetype="6"]');
         if (directEl && directEl.offsetParent !== null) {
             directEl.click();
             return 'direct_challengetype6';
         }
 
-        // Strategy B: find <li> whose innerText contains "authenticator",
-        // then click its first child with role=link/button or any jsaction,
-        // or fall back to the first <div> child (which is Google's click wrapper).
-        var kw = 'authenticator';
-        var targetLi = null;
-        var lis = document.querySelectorAll('li');
-        for (var i = 0; i < lis.length; i++) {
-            var t = (lis[i].innerText || '').toLowerCase();
-            if (t.includes(kw) && lis[i].offsetParent !== null) {
-                targetLi = lis[i];
-                break;
+        // Strategy B: Any element with data-challengetype="6"
+        var any6 = document.querySelector('[data-challengetype="6"]');
+        if (any6 && any6.offsetParent !== null) {
+            any6.click();
+            return 'any_challengetype6';
+        }
+
+        // Strategy C: find <li> or interactive element whose innerText contains "authenticator"
+        var items = document.querySelectorAll('li, [role="link"], [role="button"], [role="option"], [data-action="selectchallenge"]');
+        for (var i = 0; i < items.length; i++) {
+            var t = (items[i].innerText || items[i].textContent || '').toLowerCase();
+            if ((t.includes('authenticator') || t.includes('xác minh từ ứng dụng') || t.includes('authenticator app'))
+                    && items[i].offsetParent !== null) {
+                var child = items[i].querySelector('a, button, [role="button"], [role="link"], div');
+                if (child) {
+                    child.click();
+                    return 'item_child_click:' + child.tagName;
+                }
+                items[i].click();
+                return 'item_click:' + items[i].tagName;
             }
         }
-        if (!targetLi) return 'li_not_found';
-
-        // Prefer role=link/button or any jsaction child inside the li
-        var jaEl = targetLi.querySelector('[role="link"], [role="button"], [jsaction], a, button');
-        if (jaEl) {
-            jaEl.click();
-            return 'inner_role:' + jaEl.tagName + '/' + (jaEl.getAttribute('role') || '');
-        }
-
-        // First <div> child is Google's click container
-        var divEl = targetLi.querySelector('div');
-        if (divEl) {
-            divEl.click();
-            return 'inner_div';
-        }
-
-        // Last resort: click the LI itself
-        targetLi.click();
-        targetLi.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
-        return 'li_click_dispatch';
+        return 'not_found';
         """
     )
-    _report(cb, f"🔍 Authenticator click: {result}", driver)
-    if result and result not in ("li_not_found",):
+    _report(cb, f"🔍 Authenticator option click: {result}", driver)
+    if result and result != "not_found":
         return True
 
-    # DOM fallback via Selenium ActionChains
+    # Selenium XPath fallback
     try:
         from selenium.webdriver.common.action_chains import ActionChains
-        el = driver.find_element(
-            By.XPATH,
-            "//li[.//*[contains(translate(.,"
-            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authenticator')]]"
-        )
-        ActionChains(driver).move_to_element(el).click(el).perform()
-        _report(cb, "✅ Clicked Authenticator via ActionChains", driver)
-        return True
+        xpath = "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'authenticator')]"
+        for el in driver.find_elements(By.XPATH, xpath):
+            if el.is_displayed() and el.tag_name in ("li", "a", "button", "div", "span"):
+                ActionChains(driver).move_to_element(el).click(el).perform()
+                _report(cb, "✅ Clicked Authenticator option via ActionChains", driver)
+                return True
     except Exception as e:
         _report(cb, f"⚠️ ActionChains fallback failed: {e}", driver)
 
@@ -379,144 +377,112 @@ def _click_authenticator_option(driver: webdriver.Chrome,
 
 def _click_try_another_way(driver: webdriver.Chrome) -> bool:
     """Click the 'Try another way' link/button. Returns True on success."""
-    # JS innerText scan — most reliable across Google UI variants
     try:
-        driver.execute_script(
+        res = driver.execute_script(
             """
-            var els = document.querySelectorAll('a, button, [role="button"]');
+            var els = document.querySelectorAll('button, a, [role="button"], span, div');
             for (var i = 0; i < els.length; i++) {
-                if ((els[i].innerText || '').toLowerCase().includes('try another way')
-                        && els[i].offsetParent !== null) {
-                    els[i].click(); return;
+                var el = els[i];
+                var t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                if ((t === 'try another way' || t.includes('try another way') || t.includes('thử cách khác'))
+                        && el.offsetParent !== null) {
+                    el.click();
+                    return true;
                 }
             }
+            return false;
             """
         )
-        return True
+        if res:
+            return True
     except Exception:
         pass
-    # DOM fallback
-    for el in driver.find_elements(By.CSS_SELECTOR, "a, button, [role='button']"):
-        try:
-            if "try another way" in (el.get_attribute("innerText") or el.text or "").lower() \
-                    and el.is_displayed():
-                el.click()
+
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        for el in driver.find_elements(By.CSS_SELECTOR, "button, a, [role='button'], span, div"):
+            t = (el.text or el.get_attribute("innerText") or "").lower()
+            if "try another way" in t and el.is_displayed():
+                ActionChains(driver).move_to_element(el).click(el).perform()
                 return True
-        except Exception:
-            continue
+    except Exception:
+        pass
     return False
 
 
 def _handle_2fa(driver: webdriver.Chrome, totp_secret: str,
-                cb: ProgressCB = None) -> None:
+                cb: ProgressCB = None) -> bool:
     """
-    Handle any Google 2FA challenge after password submission.
-
-    Detection is CONTENT-based, not URL-based, because Google reuses the
-    /skotp URL for both the g.co/sc device code page AND the TOTP page.
-
-    Flow:
-      1. If page shows "g.co/sc"  →  click "Try another way"
-      2. If page shows method list →  click "Authenticator app" option
-      3. Enter the TOTP code from the authenticator key
+    Handle Google 2FA challenges. If the initial challenge is a device prompt,
+    Security Code (10-digit from Android settings), or g.co/sc code, click
+    'Try another way', select Google Authenticator, and submit the 6-digit TOTP code.
     """
-    hostname = urlparse(driver.current_url).hostname or ""
-    if "accounts.google.com" not in hostname:
-        _report(cb, "ℹ️ Step 4/6 — No 2FA challenge, already past login", driver)
-        return
-
-    src = driver.page_source.lower()
-    path = urlparse(driver.current_url).path
-    _report(cb, f"🔐 Step 4/6 — Challenge page\n📍 {path}", driver)
-
-    # ── Stage 1: g.co/sc device-code page → click "Try another way" ──────────
-    if "g.co/sc" in src:
-        _report(cb,
-                "🔄 Step 4a — g.co/sc page detected (device browser code).\n"
-                "Clicking 'Try another way' to switch to Authenticator app…",
-                driver)
-        clicked = _click_try_another_way(driver)
+    for loop_count in range(1, 7):
         time.sleep(2)
+        current_url = driver.current_url
+        parsed = urlparse(current_url)
+        hostname = parsed.hostname or ""
+        path = parsed.path or ""
+
+        # Check if already logged in past 2FA
+        if ("accounts.google.com" not in hostname
+                or hostname == "myaccount.google.com"
+                or (hostname.endswith(".google.com") and "/u/" in path and "signin" not in path)):
+            _report(cb, "✅ Step 4/6 — 2FA passed, logged in!", driver)
+            return True
+
         src = driver.page_source.lower()
-        path = urlparse(driver.current_url).path
-        _report(cb,
-                f"{'✅' if clicked else '⚠️'} Step 4a — "
-                f"{'Navigated away from g.co/sc' if clicked else 'Try another way not found'}\n"
-                f"📍 Now: {path}",
-                driver)
+        _report(cb, f"🔐 Step 4/6 (Attempt {loop_count}) — 2FA page\n📍 {path}", driver)
 
-    # ── Stage 2: Method selection page → pick Authenticator app ──────────────
-    src = driver.page_source.lower()
-    # Selection page = has "authenticator" in content but no TOTP code input yet
-    has_authenticator_option = "authenticator" in src
-    has_totp_input = any(
-        kw in src for kw in ['name="pin"', 'type="tel"', 'type="number"']
-    )
+        # Detect non-Authenticator challenges:
+        # 1. 10-digit Security code from Android settings
+        is_security_code = ("security code" in src and ("settings app" in src or "settings" in src)) or "get your android" in src
+        # 2. Prompt on phone / tablet
+        is_phone_prompt = "check your phone" in src or "tap yes" in src or "notification sent" in src
+        # 3. g.co/sc page
+        is_gco_sc = "g.co/sc" in src
+        # 4. Error from previous wrong input (like 10-digit code entered into wrong field)
+        is_wrong_digits = "wrong number of digits" in src
 
-    if has_authenticator_option and not has_totp_input:
-        _report(cb,
-                "🔍 Step 4b — Method selection page.\n"
-                "Selecting 'Authenticator app'…",
-                driver)
+        has_try_another_way = "try another way" in src or "thử cách khác" in src
+        totp_input = _find_totp_field(driver)
 
-        # Log the clickable items on the page to aid debugging
-        try:
-            items_info = driver.execute_script(
-                """
-                var out = [];
-                var items = document.querySelectorAll('li, [role="option"], [role="listitem"]');
-                for (var i = 0; i < items.length; i++) {
-                    var t = (items[i].innerText || '').trim().substring(0, 80);
-                    var ja = items[i].getAttribute('jsaction') || '';
-                    if (t) out.push(items[i].tagName + ' ja=' + ja.substring(0,30) + ' | ' + t);
-                }
-                return out.join('\\n');
-                """
-            )
-            _report(cb, f"📋 Options found:\n{items_info or '(none)'}", driver)
-        except Exception:
-            pass
+        # CASE 1: Non-Authenticator challenge on screen OR wrong digits -> MUST click "Try another way"
+        if has_try_another_way and (is_security_code or is_phone_prompt or is_gco_sc or is_wrong_digits or (not totp_input and "authenticator" not in src)):
+            reason = "Security code" if is_security_code else ("Phone prompt" if is_phone_prompt else ("g.co/sc" if is_gco_sc else "Other verification"))
+            _report(cb, f"🔄 Step 4 — Non-Authenticator challenge ({reason}). Clicking 'Try another way'…", driver)
+            clicked = _click_try_another_way(driver)
+            time.sleep(2.5)
+            continue
 
-        picked = _click_authenticator_option(driver, cb)
+        # CASE 2: Selection page (list of 2FA methods) -> pick Google Authenticator
+        if ("authenticator" in src) and not totp_input:
+            _report(cb, "🔍 Step 4 — Method selection page. Selecting 'Google Authenticator'…", driver)
+            picked = _click_authenticator_option(driver, cb)
+            time.sleep(2.5)
+            continue
 
-        if picked:
-            # Wait up to 8s for the TOTP input to appear (actual page navigation)
-            try:
-                WebDriverWait(driver, 8).until(
-                    lambda d: any(
-                        (inp.get_attribute("type") or "") in ("tel", "number", "text")
-                        and inp.is_displayed()
-                        for inp in d.find_elements(By.CSS_SELECTOR, "input")
-                        if (inp.get_attribute("aria-hidden") or "").lower() != "true"
-                    )
-                )
-                _report(cb,
-                        f"✅ Step 4b — TOTP input appeared\n"
-                        f"📍 Now: {urlparse(driver.current_url).path}",
-                        driver)
-            except Exception:
-                _report(cb,
-                        f"⚠️ Step 4b — TOTP input not found after waiting\n"
-                        f"📍 Now: {urlparse(driver.current_url).path}",
-                        driver)
-        else:
-            _report(cb, "⚠️ Step 4b — Could not click Authenticator option", driver)
+        # CASE 3: Authenticator 6-digit input is visible!
+        if totp_input:
+            _report(cb, "🔑 Step 4 — Google Authenticator input detected. Entering 6-digit code…", driver)
+            submitted = _enter_totp(driver, totp_secret, cb)
+            if submitted:
+                time.sleep(3.5)
+                src_after = driver.page_source.lower()
+                if "wrong code" in src_after or "wrong number of digits" in src_after:
+                    _report(cb, "⚠️ Code rejected, retrying with next code…", driver)
+                    time.sleep(2)
+                    continue
+                return True
+            else:
+                _report(cb, "⚠️ Failed to submit TOTP code", driver)
+
+        # Fallback if try another way is still there
+        if has_try_another_way:
+            _click_try_another_way(driver)
             time.sleep(2)
 
-    # ── Stage 3: TOTP input page → enter the code ────────────────────────────
-    time.sleep(0.5)
-    _report(cb, "🔑 Step 4c — Entering authenticator TOTP code…", driver)
-    submitted = _enter_totp(driver, totp_secret, cb)
-    if submitted:
-        time.sleep(3)
-        _report(cb,
-                f"✅ Step 4 — TOTP submitted\n📍 URL: {driver.current_url[:80]}",
-                driver)
-    else:
-        _report(cb,
-                "⚠️ Step 4 — Could not find TOTP input field.\n"
-                f"📍 Current page: {urlparse(driver.current_url).path}",
-                driver)
+    return False
 
 
 def _generate_totp(secret: str) -> str:
