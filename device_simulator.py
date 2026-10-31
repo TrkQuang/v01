@@ -140,12 +140,8 @@ class DeviceProfile:
 
   // ── 1. Remove automation trace ──────────────────────────────────────────
   try {{
-    const desc = Object.getOwnPropertyDescriptor(navigator, 'webdriver');
-    if (desc) {{
-      Object.defineProperty(navigator, 'webdriver', {{
-        get: () => undefined,
-        configurable: true
-      }});
+    if ('webdriver' in navigator) {{
+      delete Object.getPrototypeOf(navigator).webdriver;
     }}
   }} catch (e) {{}}
 

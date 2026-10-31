@@ -1,10 +1,10 @@
 modules = ["python-3.11"]
-run = "pip install -r requirements.txt && python main.py"
+run = "pip install -r requirements.txt && (which Xvfb >/dev/null 2>&1 && xvfb-run -a python main.py || python main.py)"
 onBoot = "pip install -r requirements.txt"
 
 [nix]
 channel = "stable-25_05"
-packages = ["chromium", "chromedriver"]
+packages = ["chromium", "chromedriver", "xorgserver"]
 
 [workflows]
 runButton = "Start application"
@@ -16,7 +16,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pip install -r requirements.txt && python main.py"
+args = "pip install -r requirements.txt && (which Xvfb >/dev/null 2>&1 && xvfb-run -a python main.py || python main.py)"
 
 [workflows.workflow.metadata]
 outputType = "console"

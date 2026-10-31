@@ -60,6 +60,44 @@ def _report(cb: ProgressCB, msg: str, driver: Optional[webdriver.Chrome] = None)
 
 # ── Driver factory ────────────────────────────────────────────────────────────
 
+def _patch_chromedriver(original_path: str) -> str:
+    """Patch ChromeDriver binary to replace 'cdc_' signature with 'dog_'."""
+    try:
+        import stat
+        import tempfile
+        tmp_dir = os.path.join(tempfile.gettempdir(), "patched_chromedriver")
+        os.makedirs(tmp_dir, exist_ok=True)
+        patched_path = os.path.join(tmp_dir, "chromedriver")
+        if os.path.exists(patched_path) and os.path.getsize(patched_path) > 0:
+            return patched_path
+
+        with open(original_path, "rb") as f:
+            content = f.read()
+
+        new_content = content.replace(b"cdc_", b"dog_")
+        with open(patched_path, "wb") as f:
+            f.write(new_content)
+
+        st = os.stat(patched_path)
+        os.chmod(patched_path, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        return patched_path
+    except Exception as e:
+        logger.warning("Could not patch chromedriver: %s", e)
+        return original_path
+
+
+def _human_type(el, text: str):
+    """Simulate realistic human typing with random per-key delay."""
+    el.click()
+    time.sleep(random.uniform(0.2, 0.4))
+    el.clear()
+    time.sleep(random.uniform(0.1, 0.2))
+    for char in text:
+        el.send_keys(char)
+        time.sleep(random.uniform(0.04, 0.12))
+    time.sleep(random.uniform(0.4, 0.8))
+
+
 def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     """
     Return a headless Chrome WebDriver fully configured to impersonate a
@@ -74,7 +112,9 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     """
     options = Options()
 
-    if config.HEADLESS:
+    # If running with Xvfb virtual display (DISPLAY=:99), run headed for max stealth
+    has_display = bool(os.environ.get("DISPLAY"))
+    if config.HEADLESS and not has_display:
         options.add_argument("--headless=new")
 
     # ── Core stability flags ──────────────────────────────────────────────────
@@ -105,24 +145,17 @@ def _build_driver(profile: DeviceProfile) -> webdriver.Chrome:
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    # ── Chrome-level mobile emulation ─────────────────────────────────────────
-    # Reduced UA: "Android 10; K" — device model intentionally absent (Chrome 110+)
-    mobile_emulation = {
-        "deviceMetrics": {
-            "width":      w,
-            "height":     h,
-            "pixelRatio": profile.pixel_ratio,
-            "touch":      True,
-        },
-        "userAgent": profile.user_agent,
-    }
-    options.add_experimental_option("mobileEmulation", mobile_emulation)
+    # ── Stealth launch options ────────────────────────────────────────────────
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
 
     # ── Launch browser ────────────────────────────────────────────────────────
     chromium_binary = shutil.which("chromium") or shutil.which("chromium-browser")
     chromedriver_binary = shutil.which("chromedriver") or "chromedriver"
     if chromium_binary:
         options.binary_location = chromium_binary
+    if os.path.isabs(chromedriver_binary) or shutil.which(chromedriver_binary):
+        chromedriver_binary = _patch_chromedriver(shutil.which(chromedriver_binary) or chromedriver_binary)
     service = Service(executable_path=chromedriver_binary)
     driver = webdriver.Chrome(service=service, options=options)
 
@@ -513,17 +546,23 @@ def _gmail_login(driver: webdriver.Chrome, email: str, password: str,
         _report(cb, f"📧 Step 2/6 — Entering email: {email}", driver)
         email_field = _wait_for(driver, By.CSS_SELECTOR,
                                 'input[name="identifier"], input[type="email"]')
-        email_field.clear()
-        email_field.send_keys(email)
+        _human_type(email_field, email)
+        time.sleep(random.uniform(0.6, 1.2))
         _wait_for(driver, By.ID, "identifierNext").click()
-        time.sleep(2)
+        time.sleep(3)
+
+        # Early check: Detect Google anti-bot block before password step
+        page_src = driver.page_source.lower()
+        if "couldn't sign you in" in page_src or "this browser or app may not be secure" in page_src:
+            _report(cb, "❌ Step 2/6 — Google blocked login (This browser or app may not be secure).", driver)
+            return False
 
         # ── Step 3: Enter password ────────────────────────────────────────────
         _report(cb, "🔒 Step 3/6 — Entering password…", driver)
         password_field = _wait_for(driver, By.CSS_SELECTOR,
                                    'input[type="password"]')
-        password_field.clear()
-        password_field.send_keys(password)
+        _human_type(password_field, password)
+        time.sleep(random.uniform(0.6, 1.2))
         _wait_for(driver, By.ID, "passwordNext").click()
         time.sleep(3)
 
