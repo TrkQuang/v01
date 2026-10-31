@@ -349,3 +349,4 @@ class RedemptionWorkflow:
 
 # Global instance
 redemption_workflow = RedemptionWorkflow()
+

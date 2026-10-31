@@ -144,3 +144,4 @@ class PromotionService:
 
 # Global instance
 promotion_service = PromotionService()
+

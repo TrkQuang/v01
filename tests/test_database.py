@@ -61,3 +61,32 @@ def test_diagnostic_session_cascade(test_db):
     assert len(saved_session.results) == 1
     assert saved_session.results[0].check_name == "Hardware Check"
 
+
+
+def test_auto_migration_handles_legacy_promotions():
+    from database import init_db, engine, get_db
+    from sqlalchemy import text, inspect
+    from models import Promotion
+
+    # 1. Simulate legacy database with old promotions table schema
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS promotion_sources;"))
+        conn.execute(text("DROP TABLE IF EXISTS promotions;"))
+        conn.execute(text("CREATE TABLE promotions (id INTEGER PRIMARY KEY, promo_code VARCHAR(64), title VARCHAR(128));"))
+
+    inspector = inspect(engine)
+    cols = {c["name"] for c in inspector.get_columns("promotions")}
+    assert "promo_code" in cols
+    assert "promotion_id" not in cols
+
+    # 2. Run init_db which executes _auto_migrate()
+    init_db()
+
+    # 3. Verify schema upgraded and seeded successfully
+    inspector = inspect(engine)
+    new_cols = {c["name"] for c in inspector.get_columns("promotions")}
+    assert "promotion_id" in new_cols
+    assert "promotion_name" in new_cols
+
+    with get_db() as db:
+        assert db.query(Promotion).count() >= 3

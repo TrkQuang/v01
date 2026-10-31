@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, Country, Promotion, PromotionSource, User
@@ -47,8 +47,69 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db() -> None:
+def _auto_migrate() -> None:
+    """
+    Inspect existing tables and migrate legacy schemas automatically.
+    Resolves schema divergence (e.g. legacy promotions table missing promotion_id column)
+    without manual DBA intervention.
+    """
+    try:
+        inspector = inspect(engine)
+        existing_tables = inspector.get_table_names()
+
+        # 1. Check promotions table schema
+        if "promotions" in existing_tables:
+            columns = {c["name"] for c in inspector.get_columns("promotions")}
+            # Legacy promotions table had promo_code instead of promotion_id
+            if "promotion_id" not in columns:
+                logger.warning(
+                    "Detected legacy 'promotions' table schema without 'promotion_id'. "
+                    "Re-creating promotions catalog..."
+                )
+                with engine.begin() as conn:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text("DROP TABLE IF EXISTS promotion_sources CASCADE;"))
+                        conn.execute(text("DROP TABLE IF EXISTS promotions CASCADE;"))
+                    else:
+                        conn.execute(text("DROP TABLE IF EXISTS promotion_sources;"))
+                        conn.execute(text("DROP TABLE IF EXISTS promotions;"))
+
+        # 2. Check users table columns
+        if "users" in existing_tables:
+            user_cols = {c["name"] for c in inspector.get_columns("users")}
+            with engine.begin() as conn:
+                if "selected_country_code" not in user_cols:
+                    logger.info("Migrating users table: adding selected_country_code")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN selected_country_code VARCHAR(8) DEFAULT 'US';"))
+                if "account_type" not in user_cols:
+                    logger.info("Migrating users table: adding account_type")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN account_type VARCHAR(32) DEFAULT 'PERSONAL';"))
+
+        # 3. Check devices table columns
+        if "devices" in existing_tables:
+            dev_cols = {c["name"] for c in inspector.get_columns("devices")}
+            with engine.begin() as conn:
+                if "user_id" not in dev_cols:
+                    logger.info("Migrating devices table: adding user_id")
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN user_id INTEGER;"))
+                if "is_user_reported" not in dev_cols:
+                    logger.info("Migrating devices table: adding is_user_reported")
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN is_user_reported BOOLEAN DEFAULT FALSE;"))
+                if "bootloader_locked" not in dev_cols:
+                    logger.info("Migrating devices table: adding bootloader_locked")
+                    conn.execute(text("ALTER TABLE devices ADD COLUMN bootloader_locked BOOLEAN;"))
+
+    except Exception as e:
+        logger.warning("Auto-migration check encountered an exception: %s", e)
+
+
+def init_db(reset: bool = False) -> None:
     """Create all tables and seed default verified data."""
+    if reset or os.environ.get("RESET_DB", "").lower() in ("true", "1", "yes"):
+        logger.warning("RESET_DB requested: dropping all existing database tables...")
+        Base.metadata.drop_all(bind=engine)
+
+    _auto_migrate()
     logger.info("Initializing database with engine: %s", engine.url)
     Base.metadata.create_all(bind=engine)
 
@@ -179,3 +240,12 @@ def delete_user_data(db: Session, telegram_id: int | str) -> bool:
     db.delete(user)
     db.commit()
     return True
+
+
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(level=logging.INFO)
+    do_reset = "--reset" in sys.argv
+    init_db(reset=do_reset)
+    print("Database initialized successfully.")
+

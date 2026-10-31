@@ -81,3 +81,4 @@ class AuditService:
 
 # Global instance
 audit_service = AuditService()
+

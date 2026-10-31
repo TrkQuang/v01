@@ -140,3 +140,4 @@ class RedemptionVerificationService:
 
 # Global instance
 redemption_verification_service = RedemptionVerificationService()
+

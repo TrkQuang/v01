@@ -57,3 +57,4 @@ Users retain complete control over their diagnostic and claim history:
 ## 6. Vulnerability Disclosure
 
 If you discover a security vulnerability in this project, please open an issue or contact the repository maintainers directly with reproducible steps. Do not disclose vulnerabilities publicly before a fix has been committed.
+

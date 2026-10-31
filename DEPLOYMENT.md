@@ -213,3 +213,4 @@ Verify platform operational status via Telegram or shell:
   ```bash
   pytest tests -v
   ```
+

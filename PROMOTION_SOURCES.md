@@ -68,3 +68,4 @@ This document records the official sources, campaign terms, and validation statu
 | Google Play Subscriptions Management | [https://play.google.com/store/account/subscriptions](https://play.google.com/store/account/subscriptions) |
 | Google Play Payment Methods | [https://play.google.com/store/paymentmethods](https://play.google.com/store/paymentmethods) |
 | Google Account Security & Devices | [https://myaccount.google.com/device-activity](https://myaccount.google.com/device-activity) |
+

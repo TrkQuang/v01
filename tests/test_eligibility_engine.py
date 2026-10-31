@@ -135,3 +135,4 @@ def test_account_ineligibility():
     assert finding.passed is False
     assert finding.code == EligibilityCode.ACCOUNT_INELIGIBLE
     assert "Workspace" in finding.summary
+

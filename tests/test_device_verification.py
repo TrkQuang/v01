@@ -57,3 +57,4 @@ def test_device_classification_tiers():
     rep2 = service.inspect_environment(manual_model="Samsung Galaxy S24")
     assert rep2.device_tier == DeviceTier.UNKNOWN
     assert rep2.is_hardware_verified is False
+
