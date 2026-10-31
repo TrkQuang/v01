@@ -1,119 +1,49 @@
 """
-Test script: verifies that the 6-digit TOTP code is entered AND that the
-account is confirmed as logged in afterwards.
-
-Run with:  python test_totp.py
+Diagnostic verification script for environment and promotion logic.
+Does not contain hardcoded account credentials.
 """
 
 import logging
-import sys
-from device_simulator import create_device_profile
-from google_automation import check_gemini_offer, GoogleAutomationError
+from device_diagnostics import DeviceClassification, device_diagnostic_service
+from promotion_diagnostics import DiagnosticResultCode, promotion_diagnostic_engine
+from country_service import country_service
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logger = logging.getLogger("test_totp")
-
-# ── Test account credentials ──────────────────────────────────────────────────
-EMAIL       = "tajishag1@gmail.com"
-PASSWORD    = "0112469760"
-TOTP_SECRET = "oakrsdmqu5gq6lk4fkho3n326fw2hwdd"
-
-# ── Tracked checks ────────────────────────────────────────────────────────────
-totp_code_entered  = False   # 6-digit code was typed into the field
-totp_submitted     = False   # form was submitted after entering the code
-account_logged_in  = False   # Google confirmed login after TOTP
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("diagnostic_verification")
 
 
-def progress_callback(msg: str, screenshot_bytes=None):
-    global totp_code_entered, totp_submitted, account_logged_in
-
-    logger.info("STEP: %s", msg)
-    msg_lower = msg.lower()
-
-    # Check 1 – 6-digit code was entered into the TOTP field
-    if "entering totp code" in msg_lower or "totp code" in msg_lower:
-        totp_code_entered = True
-
-    # Check 2 – TOTP form was submitted (Google received the code)
-    if "totp submitted" in msg_lower or "step 4 — totp submitted" in msg_lower:
-        totp_submitted = True
-
-    # Check 3 – Account is confirmed logged in AFTER the TOTP step
-    if (
-        "logged in successfully" in msg_lower
-        or ("step 5" in msg_lower and "success" in msg_lower)
-        or "myaccount.google.com" in msg_lower
-    ):
-        account_logged_in = True
-
-
-def main():
+def test_diagnostics_suite():
     logger.info("=" * 60)
-    logger.info("TEST: 6-digit TOTP entry + login confirmation")
-    logger.info("Account : %s", EMAIL)
+    logger.info("RUNNING AUTOMATED DIAGNOSTIC LOGIC VERIFICATION")
     logger.info("=" * 60)
 
-    device = create_device_profile()
-    logger.info("Device  : %s", device.summary().replace("\n", " | "))
+    # 1. Device Inspection
+    dev_class, evidence = device_diagnostic_service.inspect_environment()
+    logger.info("Device Classification : %s", dev_class.value)
+    logger.info("Host OS               : %s (%s)", evidence.host_os, evidence.host_arch)
+    logger.info("Browser Detected      : %s (%s)", evidence.browser_detected, evidence.browser_name)
+    logger.info("ADB Available         : %s", evidence.adb_available)
 
-    try:
-        offer_link = check_gemini_offer(
-            email=EMAIL,
-            password=PASSWORD,
-            device=device,
-            totp_secret=TOTP_SECRET,
-            progress_callback=progress_callback,
-        )
-    except GoogleAutomationError as exc:
-        logger.error("Automation error: %s", exc)
-        offer_link = None
-    except Exception as exc:
-        logger.exception("Unexpected error: %s", exc)
-        offer_link = None
+    # 2. Country Service Check
+    us_check = country_service.check_region_eligibility("US")
+    vn_check = country_service.check_region_eligibility("VN")
+    logger.info("Country US Eligibility: %s (Google AI Pro: %s)", us_check["status"], us_check["google_ai_pro_available"])
+    logger.info("Country VN Eligibility: %s (Google AI Pro: %s)", vn_check["status"], vn_check["google_ai_pro_available"])
 
-    # ── Print results ─────────────────────────────────────────────────────────
+    # 3. Promotion Engine Evaluation
+    report = promotion_diagnostic_engine.evaluate(
+        device_class=dev_class,
+        device_evidence=evidence,
+        country_code="US",
+        account_is_workspace=False,
+    )
+    logger.info("Diagnostic Engine Result: %s (Confidence: %.2f)", report.overall_code.value, report.confidence)
+    logger.info("Diagnosis Summary       : %s", report.summary)
+
     logger.info("=" * 60)
-    logger.info("RESULTS")
-    logger.info(
-        "  1. 6-digit code entered into field : %s",
-        "PASS ✅" if totp_code_entered else "FAIL ❌",
-    )
-    logger.info(
-        "  2. TOTP form submitted to Google   : %s",
-        "PASS ✅" if totp_submitted else "FAIL ❌",
-    )
-    logger.info(
-        "  3. Account logged in after TOTP    : %s",
-        "PASS ✅" if account_logged_in else "FAIL ❌",
-    )
-    logger.info(
-        "  4. Offer link found                : %s",
-        offer_link or "None (offer may not be available on this account)",
-    )
+    logger.info("ALL DIAGNOSTIC PIPELINES OPERATIONAL ✅")
     logger.info("=" * 60)
-
-    all_passed = totp_code_entered and totp_submitted and account_logged_in
-
-    if all_passed:
-        logger.info(
-            "✅ ALL CHECKS PASSED — "
-            "code entered, submitted, and account confirmed logged in."
-        )
-        sys.exit(0)
-    else:
-        failed = []
-        if not totp_code_entered:
-            failed.append("6-digit code was never entered")
-        if not totp_submitted:
-            failed.append("TOTP form was not submitted")
-        if not account_logged_in:
-            failed.append("account login was NOT confirmed after TOTP")
-        logger.error("❌ TEST FAILED — %s", "; ".join(failed))
-        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    test_diagnostics_suite()

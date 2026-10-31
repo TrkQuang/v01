@@ -1,136 +1,102 @@
-# pixel-gemini
+# Pixel Promotion Research & Diagnostic Platform
 
-**Pixel 11 Pro Google One Gemini Offer Bot – Telegram Interface**
-
-A Replit-hosted Telegram bot that simulates a Google Pixel 11 Pro (Android 17)
-device, logs into a user-supplied Gmail account, and retrieves the
-**12-month free Gemini Pro** activation link from Google One.
+A Telegram-based research and diagnostic platform designed to analyze Google Pixel promotional eligibility (Google AI Pro / Gemini Advanced offers) and diagnose why browser-simulated and virtual environments fail to claim hardware-bound offers.
 
 ---
 
-## Project Structure
+## 🌟 Key Features
+
+| Capability | Technical Details |
+|---|---|
+| 📱 **Device Environment Diagnostics** | Classifies execution into `BROWSER_SIMULATION`, `ANDROID_EMULATOR`, `PHYSICAL_ANDROID`, or `VERIFIED_PIXEL`. Probes ADB, bootloader state, and Play Services. |
+| 🔬 **Eligibility Diagnostic Engine** | Evaluates promotional eligibility across 9 deterministic result codes (`OFFER_VISIBLE`, `DEVICE_NOT_VERIFIED`, `REGION_NOT_SUPPORTED`, `ACCOUNT_NOT_ELIGIBLE`, etc.). |
+| 🌍 **Country & Store Database** | ISO-3166 regional matrix detailing Google AI Pro and Google Pixel promotion support. |
+| 🔒 **Non-Custodial Architecture** | Never collects or stores Google account passwords, 2FA codes, recovery codes, or session tokens. |
+| 📊 **Persistent Audit & History** | SQLite (default) and PostgreSQL support via SQLAlchemy tracking diagnostic sessions and telemetry. |
+| 🤖 **Interactive Telegram Bot** | Modern Telegram UI with inline keyboards, live diagnostic sweeps, and structured reports. |
+
+---
+
+## 🏗️ Architecture
 
 ```
-pixel-gemini/
-├── main.py               # Telegram bot entry point
-├── device_simulator.py   # Android Pixel 11 Pro device simulation
-├── google_automation.py  # Google One login and offer detection
-├── config.py             # Configuration and constants
-├── requirements.txt      # Python dependencies
-└── README.md             # This file
+Telegram Bot (main.py)
+        │
+        ├──> Device Diagnostic Service (device_diagnostics.py)
+        ├──> Promotion Diagnostic Engine (promotion_diagnostics.py)
+        ├──> Country Service (country_service.py)
+        ├──> Google Web Diagnostic Prober (google_automation.py)
+        │
+        └──> SQLAlchemy Storage (database.py) ──> SQLite / PostgreSQL
 ```
 
----
-
-## Features
-
-| Feature | Details |
-|---|---|
-| 📱 Device simulation | Pixel 11 Pro (Android 17) with unique IMEI, Android ID, and user-agent per session |
-| 🤖 Telegram bot | `/start`, `/login`, `/check_offer`, `/get_link`, `/status` commands |
-| 🔐 Gmail login | Selenium-based Google account authentication |
-| 💳 Offer detection | Scans Google One for the 12-month Gemini Pro offer and extracts the activation link |
-| 🔄 Session management | In-memory per-user sessions; passwords deleted from chat on capture |
+For detailed architectural diagrams and data flows, see [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## Setup on Replit
+## 🚀 Quickstart
 
-### 1. Fork / import this repository
-
-Open [Replit](https://replit.com) and create a new Repl from this GitHub repo.
-
-### 2. Create a Telegram Bot
-
-1. Open Telegram and search for **@BotFather**.
-2. Send `/newbot` and follow the prompts.
-3. Copy the API token you receive (looks like `123456:ABC-DEF…`).
-
-### 3. Set the environment variable
-
-In the Replit sidebar click **Secrets** (🔒) and add:
-
-| Key | Value |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | Your token from BotFather |
-
-### 4. Install dependencies
+### 1. Installation
 
 ```bash
+git clone https://github.com/TrkQuang/v01.git
+cd v01
 pip install -r requirements.txt
 ```
 
-Replit runs this automatically on first start if you use a `pyproject.toml`
-or if the Run button is configured to execute `pip install` first.
+### 2. Configure Environment
 
-### 5. Run the bot
+Set your Telegram Bot token:
 
-Click **Run** in Replit, or execute:
+```bash
+# On Linux / macOS / Replit Secrets:
+export TELEGRAM_BOT_TOKEN="your_bot_token_from_botfather"
+
+# On Windows PowerShell:
+$env:TELEGRAM_BOT_TOKEN="your_bot_token_from_botfather"
+```
+
+### 3. Run Automated Tests
+
+Run the full pytest test suite (19 unit & integration tests):
+
+```bash
+pytest tests -v
+```
+
+### 4. Start the Platform
 
 ```bash
 python main.py
 ```
 
-The bot will start polling for Telegram updates.
-
 ---
 
-## Usage
+## 📱 Telegram Commands
 
-| Command | Description |
+| Command | Purpose |
 |---|---|
-| `/start` | Show welcome message and command list |
-| `/login` | Enter Gmail email and password (two-step conversation) |
-| `/check_offer` | Simulate device, log in, and search for the Gemini Pro offer |
-| `/get_link` | Retrieve the last captured offer link |
-| `/status` | View current session info and device profile |
-
-### Typical flow
-
-```
-You: /start
-Bot: Welcome…
-
-You: /login
-Bot: Please enter your Gmail address:
-
-You: user@gmail.com
-Bot: Email received. Now enter your password:
-
-You: ••••••••
-Bot: ✅ Credentials saved. New Pixel 11 Pro device profile created…
-
-You: /check_offer
-Bot: ⏳ Launching device simulator…
-Bot: 🎉 Gemini Pro Offer Found! 🔗 https://one.google.com/…
-```
+| `/start` | Platform welcome message, privacy policy, and interactive menu. |
+| `/device` | Diagnostic sweep of execution host, browser, ADB, and hardware attestation. |
+| `/eligibility` | Interactive country selector to test regional eligibility against Google Store terms. |
+| `/diagnose` | Comprehensive multi-tier diagnostic run (Device + Region + Web Prober). |
+| `/status` | Platform health, active database, and execution tier overview. |
+| `/history` | View your past 5 diagnostic sessions and result codes. |
+| `/help` | Detailed manual and explanation of all diagnostic result codes. |
 
 ---
 
-## Technical Notes
+## 📚 Technical Documentation
 
-- **Headless Chrome** is used via Selenium with mobile emulation matching
-  the Pixel 11 Pro screen dimensions (412 × 915, pixel ratio 3.5).
-- A new **IMEI**, **Android ID**, and **Chrome version patch** are generated
-  for every session using the `device_simulator.py` module.
-- The **user agent** keeps the Pixel 11 Pro identity constant while varying
-  the Chrome patch version and Android ID to reduce fingerprinting.
-- Credentials are stored **in memory only** and never written to disk.
-  The Telegram message containing the password is deleted immediately after
-  being read.
+- [Device Diagnostics & Hardware Attestation](docs/device-diagnostics.md)
+- [Promotion Eligibility & Condition Matrix](docs/promotion-eligibility.md)
+- [Security & Non-Custodial Architecture](docs/security.md)
+- [System Architecture & Data Flows](docs/architecture.md)
 
 ---
 
-## Requirements
+## ⚠️ Important Engineering Note
 
-- Python 3.10+
-- Google Chrome / Chromium installed (Replit provides this)
-- `chromedriver` on PATH (managed automatically by `webdriver-manager`)
+Google Pixel promotional offers are **cryptographically hardware-bound**. Desktop browser simulations, User-Agent overrides (`Sec-CH-UA-Model`), and standard Android emulators cannot forge Titan M2 KeyStore attestation or Google Play Integrity tokens. 
 
----
-
-## Disclaimer
-
-This project is provided for educational and personal use only.
-Automating Google account access may violate Google's Terms of Service.
-Use responsibly and only with accounts you own.
+To redeem a live promotional offer, the account owner must activate the offer directly through the **Google One App** on a **physical Google Pixel device** in an officially supported country with an eligible personal Google Account.

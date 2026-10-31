@@ -1,0 +1,102 @@
+{
+  "US": {
+    "country_name": "United States",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["US"],
+    "redemption_regions": ["US"],
+    "official_source": "https://store.google.com/us/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Full Google Store retail promotion eligible; requires US Google Play billing."
+  },
+  "GB": {
+    "country_name": "United Kingdom",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["GB", "UK"],
+    "redemption_regions": ["GB", "UK"],
+    "official_source": "https://store.google.com/gb/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Full UK Google Store retail promotion eligible."
+  },
+  "CA": {
+    "country_name": "Canada",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["CA"],
+    "redemption_regions": ["CA"],
+    "official_source": "https://store.google.com/ca/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Eligible in Canadian dollars via Google Play CA."
+  },
+  "DE": {
+    "country_name": "Germany",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["DE", "EU"],
+    "redemption_regions": ["DE", "EU"],
+    "official_source": "https://store.google.com/de/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "EU terms apply; German Google Play billing required."
+  },
+  "FR": {
+    "country_name": "France",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["FR", "EU"],
+    "redemption_regions": ["FR", "EU"],
+    "official_source": "https://store.google.com/fr/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "EU terms apply; French Google Play billing required."
+  },
+  "JP": {
+    "country_name": "Japan",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["JP"],
+    "redemption_regions": ["JP"],
+    "official_source": "https://store.google.com/jp/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Japan Google Store promotion; requires Japanese Google Play billing."
+  },
+  "AU": {
+    "country_name": "Australia",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["AU"],
+    "redemption_regions": ["AU"],
+    "official_source": "https://store.google.com/au/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Australia Google Store terms apply."
+  },
+  "IN": {
+    "country_name": "India",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": "UNKNOWN",
+    "purchase_requirement_regions": ["IN"],
+    "redemption_regions": ["IN"],
+    "official_source": "https://one.google.com/about/plans",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Google One AI Premium is sold in India, but device hardware bundle promotions are tied to select retail partners (Flipkart); direct Google Store hardware attestation varies."
+  },
+  "VN": {
+    "country_name": "Vietnam",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": false,
+    "purchase_requirement_regions": [],
+    "redemption_regions": [],
+    "official_source": "https://support.google.com/pixelphone/answer/4457705",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Google Pixel is not officially distributed via Google Store in Vietnam. Hardware bundle promotions are not supported for Vietnam Google Play regional accounts without supported country billing."
+  },
+  "SG": {
+    "country_name": "Singapore",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["SG"],
+    "redemption_regions": ["SG"],
+    "official_source": "https://store.google.com/sg/terms/pixel_ai_promotion",
+    "last_verified": "2026-10-31T00:00:00Z",
+    "notes": "Official Singapore Google Store promotion supported."
+  }
+}
