@@ -26,6 +26,7 @@ import asyncio
 import io
 import logging
 from datetime import datetime
+from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -51,6 +52,70 @@ from session_manager import session_manager
 
 logging.basicConfig(level=config.LOG_LEVEL, format=config.LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+
+# ── Robust Message Helpers ───────────────────────────────────────────────────
+
+async def safe_reply(
+    message,
+    text: str,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: Optional[str] = "Markdown",
+    disable_web_page_preview: bool = True,
+):
+    """Safely reply to a message, falling back to plain text if Markdown entity parsing fails."""
+    if not message:
+        return None
+    try:
+        if parse_mode:
+            return await message.reply_text(
+                text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+                disable_web_page_preview=disable_web_page_preview,
+            )
+        else:
+            return await message.reply_text(
+                text,
+                reply_markup=reply_markup,
+                disable_web_page_preview=disable_web_page_preview,
+            )
+    except Exception as exc:
+        logger.warning("Markdown reply failed (%s), sending plain text fallback.", exc)
+        return await message.reply_text(
+            text,
+            reply_markup=reply_markup,
+            disable_web_page_preview=disable_web_page_preview,
+        )
+
+
+async def safe_edit(
+    message,
+    text: str,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: Optional[str] = "Markdown",
+):
+    """Safely edit a message, falling back to plain text if Markdown parsing fails."""
+    if not message:
+        return None
+    try:
+        if parse_mode:
+            return await message.edit_text(
+                text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+        else:
+            return await message.edit_text(
+                text,
+                reply_markup=reply_markup,
+            )
+    except Exception as exc:
+        logger.warning("Markdown edit failed (%s), sending plain text fallback.", exc)
+        return await message.edit_text(
+            text,
+            reply_markup=reply_markup,
+        )
 
 
 # ── Command Handlers ──────────────────────────────────────────────────────────
@@ -95,7 +160,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /account — Configure account profile & billing country\n"
         "• /cancel — Cancel an in-progress claim workflow"
     )
-    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text, reply_markup=reply_markup)
 
 
 async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -121,7 +187,8 @@ async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{message}\n\n"
         "Please select the promotion you wish to claim:"
     )
-    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text, reply_markup=reply_markup)
 
 
 async def promotions_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -144,7 +211,8 @@ async def promotions_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     lines.append("Use /claim to start a redemption workflow for any eligible promotion.")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, "\n".join(lines), disable_web_page_preview=True)
 
 
 async def account_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -183,7 +251,8 @@ async def account_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"• **Configured Google Play Country:** `{country}`\n\n"
         "Select your Google Play Store billing country below to update:"
     )
-    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text, reply_markup=reply_markup)
 
 
 async def device_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -204,7 +273,8 @@ async def device_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🔬 *Analysis:*\n"
         + "\n".join([f"• {n}" for n in report.verification_notes])
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text)
 
 
 async def eligibility_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -232,29 +302,35 @@ async def eligibility_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(
+        target_msg,
         "🌍 *Regional Eligibility Checker*\n\nSelect a country to test eligibility against official Google Store terms:",
         reply_markup=reply_markup,
-        parse_mode="Markdown",
     )
 
 
 async def diagnose_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Run full diagnostic battery (Device + Region + Web Prober)."""
     user = update.effective_user
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id if update.effective_chat else user.id
     audit_service.record_event(user.id, "CMD_DIAGNOSE")
 
-    status_msg = await update.message.reply_text("🚀 *Running multi-tier diagnostic probe…*", parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    status_msg = await safe_reply(target_msg, "🚀 *Running multi-tier diagnostic probe…*")
 
     sim_profile = create_browser_simulation_profile()
     dev_report = device_verification_service.inspect_environment(is_emulation_probe=True)
 
     loop = asyncio.get_event_loop()
-    web_status, web_details, screenshot = await loop.run_in_executor(
-        None,
-        lambda: probe_google_one_endpoints(sim_profile, config.GOOGLE_ONE_BENEFITS_URL),
-    )
+    try:
+        web_status, web_details, screenshot = await loop.run_in_executor(
+            None,
+            lambda: probe_google_one_endpoints(sim_profile, config.GOOGLE_ONE_BENEFITS_URL),
+        )
+    except Exception as e:
+        logger.error("Web probe failed: %s", e)
+        web_status, web_details, screenshot = "UNKNOWN", {"error": str(e)}, None
 
     promos = promotion_service.list_all_promotions()
     target_promo = promos[0] if promos else None
@@ -280,9 +356,12 @@ async def diagnose_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
     if screenshot:
-        await context.bot.send_photo(chat_id=chat_id, photo=io.BytesIO(screenshot), caption=f"📸 Observation: `{web_status}`")
+        try:
+            await context.bot.send_photo(chat_id=chat_id, photo=io.BytesIO(screenshot), caption=f"📸 Observation: `{web_status}`")
+        except Exception as e:
+            logger.warning("Could not send screenshot photo: %s", e)
 
-    await status_msg.edit_text(resp, parse_mode="Markdown")
+    await safe_edit(status_msg, resp)
 
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -304,7 +383,8 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"• Country Rules: `{len(country_service._countries)} countries cataloged`\n\n"
         "Use /help for command documentation."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text)
 
 
 async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -322,8 +402,9 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             .all()
         )
 
+    target_msg = update.message if update.message is not None else update.effective_message
     if not sessions:
-        await update.message.reply_text("ℹ️ No previous claim sessions on record. Use /claim to start one.")
+        await safe_reply(target_msg, "ℹ️ No previous claim sessions on record. Use /claim to start one.")
         return
 
     lines = ["📊 *Your Recent Claim Sessions:*\n"]
@@ -332,7 +413,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         p_name = s.promotion.promotion_name if s.promotion else "Unspecified Promotion"
         lines.append(f"• `{date_str}`: `{s.current_state}`\n  _{p_name}_")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await safe_reply(target_msg, "\n".join(lines))
 
 
 async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -340,13 +421,14 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     user = update.effective_user
     audit_service.record_event(user.id, "CMD_CANCEL")
 
+    target_msg = update.message if update.message is not None else update.effective_message
     active = session_manager.get_active_session(user.id)
     if not active:
-        await update.message.reply_text("ℹ️ No active claim session to cancel.")
+        await safe_reply(target_msg, "ℹ️ No active claim session to cancel.")
         return
 
     session_manager.cancel_session(active.id, "User sent /cancel")
-    await update.message.reply_text(f"❌ Claim session `{active.session_uuid[:8]}…` has been cancelled.", parse_mode="Markdown")
+    await safe_reply(target_msg, f"❌ Claim session `{active.session_uuid[:8]}…` has been cancelled.")
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,7 +452,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Promotions are validated against official Google Store and Google One terms. "
         "The bot assists you through the official process without accessing your Google account."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    target_msg = update.message if update.message is not None else update.effective_message
+    await safe_reply(target_msg, text)
 
 
 # ── Callback Query Handlers ───────────────────────────────────────────────────
@@ -391,7 +474,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         promos = promotion_service.list_all_promotions()
         buttons = [[InlineKeyboardButton(p.promotion_name, callback_data=f"claim_promo_{p.promotion_id}")] for p in promos]
         buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")])
-        await query.message.reply_text("Step 1: Select a promotion to claim:", reply_markup=InlineKeyboardMarkup(buttons))
+        await safe_reply(query.message, "Step 1: Select a promotion to claim:", reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_promo_"):
         promo_id = data.replace("claim_promo_", "")
@@ -401,7 +484,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             s_id = s.id if s else None
 
         if not s_id:
-            await query.message.reply_text("Session expired. Please type /claim to restart.")
+            await safe_reply(query.message, "Session expired. Please type /claim to restart.")
             return
 
         res = redemption_workflow.select_promotion(s_id, promo_id)
@@ -412,13 +495,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("💻 Browser Simulation (Test)", callback_data="claim_dev_Browser")],
             [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
-        await query.message.reply_text(res.message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_dev_"):
         model = data.replace("claim_dev_", "")
         s_id = context.user_data.get("active_session_id")
         if not s_id:
-            await query.message.reply_text("Session expired. Please type /claim.")
+            await safe_reply(query.message, "Session expired. Please type /claim.")
             return
 
         res = redemption_workflow.select_device(s_id, manual_model=model)
@@ -428,13 +511,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🇻🇳 Vietnam", callback_data="claim_ctry_VN"), InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN")],
             [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
-        await query.message.reply_text(res.message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_ctry_"):
         c_code = data.replace("claim_ctry_", "")
         s_id = context.user_data.get("active_session_id")
         if not s_id:
-            await query.message.reply_text("Session expired. Please type /claim.")
+            await safe_reply(query.message, "Session expired. Please type /claim.")
             return
 
         res = redemption_workflow.select_country(s_id, c_code)
@@ -442,7 +525,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🔬 Run Eligibility Evaluation", callback_data=f"claim_eval_{s_id}")],
             [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
-        await query.message.reply_text(res.message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_eval_"):
         s_id = int(data.replace("claim_eval_", ""))
@@ -452,9 +535,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 [InlineKeyboardButton("📖 Generate Redemption Instructions", callback_data=f"claim_guide_{s_id}")],
                 [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
             ]
-            await query.message.reply_text(res.message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+            await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
         else:
-            await query.message.reply_text(res.message, parse_mode="Markdown")
+            await safe_reply(query.message, res.message)
 
     elif data.startswith("claim_guide_"):
         s_id = int(data.replace("claim_guide_", ""))
@@ -464,7 +547,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("💳 Payment Method Required", callback_data=f"claim_rep_payment_{s_id}")],
             [InlineKeyboardButton("❌ Claim Failed / Ineligible", callback_data=f"claim_rep_failed_{s_id}")],
         ]
-        await query.message.reply_text(res.message, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_rep_"):
         parts = data.split("_")
@@ -478,13 +561,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         }
         user_msg = report_map.get(outcome, "Status reported")
         res = redemption_workflow.submit_redemption_result(s_id, user_msg)
-        await query.message.reply_text(res.message, parse_mode="Markdown")
+        await safe_reply(query.message, res.message)
 
     elif data == "claim_cancel":
         active = session_manager.get_active_session(user.id)
         if active:
             session_manager.cancel_session(active.id, "Cancelled by user")
-        await query.message.reply_text("❌ Claim workflow cancelled.")
+        await safe_reply(query.message, "❌ Claim workflow cancelled.")
 
     elif data == "show_promotions":
         await promotions_cmd(update, context)
@@ -506,27 +589,91 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         with get_db() as db:
             db_user = get_or_create_user(db, user.id)
             db_user.selected_country_code = c_code
-        await query.message.reply_text(f"✅ Your default Google Play Store country updated to: `{c_code}`", parse_mode="Markdown")
+        await safe_reply(query.message, f"✅ Your default Google Play Store country updated to: `{c_code}`")
 
     elif data == "gdpr_delete_data":
         success = audit_service.delete_all_user_records(user.id)
         if success:
-            await query.message.reply_text("🗑️ All your user data, claim sessions, and audit history have been completely erased.")
+            await safe_reply(query.message, "🗑️ All your user data, claim sessions, and audit history have been completely erased.")
         else:
-            await query.message.reply_text("ℹ️ No records found to delete.")
+            await safe_reply(query.message, "ℹ️ No records found to delete.")
 
     elif data.startswith("check_country_"):
         code = data.replace("check_country_", "")
         res = country_service.check_region_eligibility(code)
         emoji = "✅" if res["status"] == "ELIGIBLE" else "❌"
-        await query.message.reply_text(
+        await safe_reply(
+            query.message,
             f"{emoji} *Country Eligibility Report for {res.get('country_name', code)} ({code})*\n\n"
             f"• **Pixel Promotion Support:** `{res['status']}`\n"
             f"• **Google AI Pro Available:** `{res['google_ai_pro_available']}`\n"
             f"• **Evidence:** {res['evidence']}\n"
             f"• **Official Source:** {res.get('official_source', 'N/A')}",
-            parse_mode="Markdown",
         )
+
+
+# ── Photo & Text Handlers ────────────────────────────────────────────────────
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle screenshot uploads during claim verification."""
+    user = update.effective_user
+    audit_service.record_event(user.id, "UPLOAD_PHOTO")
+    active_session = session_manager.get_active_session(user.id)
+
+    target_msg = update.message if update.message is not None else update.effective_message
+    if not active_session:
+        await safe_reply(
+            target_msg,
+            "📸 Screenshot received, but you do not have an active claim session.\n"
+            "Use /claim to begin a guided claim workflow.",
+        )
+        return
+
+    photo = update.message.photo[-1]
+    file_id = photo.file_id
+
+    from redemption_verification import redemption_verification_service
+    assessment = redemption_verification_service.classify_redemption_evidence(
+        session_id=active_session.id,
+        evidence_type="SCREENSHOT",
+        payload=f"telegram_file_id:{file_id}",
+    )
+
+    text = (
+        "📸 *Screenshot Received & Classified*\n\n"
+        f"• **Session:** `{active_session.session_uuid[:8]}…`\n"
+        f"• **Evidence Status:** `[{assessment.status.value}]`\n"
+        f"• **Confidence:** `{int(assessment.confidence * 100)}%`\n"
+        f"• **Analysis:** {assessment.notes}\n\n"
+        f"📌 *Next Step:* {assessment.next_recommended_step}"
+    )
+    await safe_reply(target_msg, text)
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle plain text feedback from user during claim workflow."""
+    user = update.effective_user
+    msg_text = update.message.text.strip() if update.message and update.message.text else ""
+    active_session = session_manager.get_active_session(user.id)
+
+    target_msg = update.message if update.message is not None else update.effective_message
+
+    if active_session and active_session.current_state in (
+        ClaimState.USER_ACTION_REQUIRED.value,
+        ClaimState.CLAIM_IN_PROGRESS.value,
+    ):
+        res = redemption_workflow.submit_redemption_result(active_session.id, msg_text)
+        await safe_reply(target_msg, res.message)
+        return
+
+    await safe_reply(
+        target_msg,
+        "👋 Need assistance? Use these quick commands:\n"
+        "• `/claim` — Start or resume your Pixel offer claim\n"
+        "• `/promotions` — View available Pixel promotions\n"
+        "• `/device` — Check your device compatibility\n"
+        "• `/help` — View the complete command manual",
+    )
 
 
 # ── Application Main ──────────────────────────────────────────────────────────
@@ -542,6 +689,7 @@ def main() -> None:
 
     app = Application.builder().token(token).build()
 
+    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("claim", claim))
     app.add_handler(CommandHandler("promotions", promotions_cmd))
@@ -553,7 +701,13 @@ def main() -> None:
     app.add_handler(CommandHandler("history", history_cmd))
     app.add_handler(CommandHandler("cancel", cancel_cmd))
     app.add_handler(CommandHandler("help", help_cmd))
+
+    # Inline callbacks
     app.add_handler(CallbackQueryHandler(handle_callback_query))
+
+    # Media and Text
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("Pixel Promotion Claim Assistant is running.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

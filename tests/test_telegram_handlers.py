@@ -8,7 +8,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from telegram import Update, User as TgUser, Chat, Message
 from database import init_db
-from main import start, claim, promotions_cmd, account_cmd, cancel_cmd, help_cmd
+from main import (
+    start,
+    claim,
+    promotions_cmd,
+    account_cmd,
+    cancel_cmd,
+    help_cmd,
+    handle_callback_query,
+    handle_photo,
+    handle_text,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -102,3 +112,78 @@ async def test_help_command():
     call_args = update.message.reply_text.call_args[0][0]
     assert "User Manual" in call_args
     assert "/claim" in call_args
+
+
+@pytest.mark.asyncio
+async def test_callback_query_show_promotions_without_update_message():
+    """Verify inline button show_promotions works when update.message is None."""
+    from telegram import CallbackQuery
+    uid = uuid.uuid4().int % 10000000
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Frank", username="frank")
+    update.message = None  # Crucial: in callback queries, update.message is None!
+
+    query = MagicMock(spec=CallbackQuery)
+    query.data = "show_promotions"
+    query.from_user = update.effective_user
+    query.answer = AsyncMock()
+    query.message = MagicMock(spec=Message)
+    query.message.reply_text = AsyncMock()
+
+    update.callback_query = query
+    update.effective_message = query.message
+
+    context = MagicMock()
+    context.user_data = {}
+
+    await handle_callback_query(update, context)
+    query.answer.assert_called_once()
+    query.message.reply_text.assert_called_once()
+    call_args = query.message.reply_text.call_args[0][0]
+    assert "Promotional Catalog" in call_args
+
+
+@pytest.mark.asyncio
+async def test_callback_query_run_device_check():
+    """Verify inline button run_device_check works without update.message."""
+    from telegram import CallbackQuery
+    uid = uuid.uuid4().int % 10000000
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Grace", username="grace")
+    update.message = None
+
+    query = MagicMock(spec=CallbackQuery)
+    query.data = "run_device_check"
+    query.from_user = update.effective_user
+    query.answer = AsyncMock()
+    query.message = MagicMock(spec=Message)
+    query.message.reply_text = AsyncMock()
+
+    update.callback_query = query
+    update.effective_message = query.message
+
+    context = MagicMock()
+    context.user_data = {}
+
+    await handle_callback_query(update, context)
+    query.answer.assert_called_once()
+    query.message.reply_text.assert_called_once()
+    call_args = query.message.reply_text.call_args[0][0]
+    assert "Device Environment Report" in call_args
+
+
+@pytest.mark.asyncio
+async def test_handle_text_default_help():
+    """Verify text messages receive help guidance."""
+    uid = uuid.uuid4().int % 10000000
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Helen")
+    update.message = MagicMock(spec=Message)
+    update.message.text = "Hello bot"
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+
+    context = MagicMock()
+    await handle_text(update, context)
+    update.message.reply_text.assert_called_once()
+    assert "/claim" in update.message.reply_text.call_args[0][0]

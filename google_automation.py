@@ -53,6 +53,8 @@ def _build_diagnostic_driver(profile: BrowserSimulationProfile) -> webdriver.Chr
     options.add_argument(f"--window-size={profile.screen_width},{profile.screen_height}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--lang=en-US")
 
@@ -171,7 +173,7 @@ def probe_google_one_endpoints(
             screenshot,
         )
 
-    except WebDriverException as exc:
+    except Exception as exc:
         logger.error("Web diagnostic probe failure: %s", exc)
         return "UNKNOWN", {"error": str(exc)}, None
     finally:
