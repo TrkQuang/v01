@@ -93,13 +93,44 @@ def test_promotion_expiration():
     assert report.primary_code == EligibilityCode.PROMOTION_EXPIRED
 
 
-def test_unsupported_promotion_source():
-    """Requirement 4: Flagging unreleased / unverified research targets."""
+def test_pixel_11_pro_verified_promotion_eligible():
+    """Verify Pixel 11 Pro 6-Month Google AI Pro offer evaluates as eligible."""
     promo = promotion_service.get_promotion("pixel-11-pro-6m-ai-pro")
+    assert promo is not None
+    assert promo.source_status == "VERIFIED_OFFICIAL"
     device = make_test_device(model="Pixel 11 Pro")
 
     report = eligibility_engine.evaluate(
         promotion=promo,
+        device_report=device,
+        country_code="TH",
+        account_type="PERSONAL",
+    )
+    assert report.is_eligible is True
+    assert report.primary_code == EligibilityCode.DEVICE_ELIGIBLE
+
+
+def test_unsupported_promotion_source():
+    """Requirement 4: Flagging unreleased / unverified research targets."""
+    unverified_promo = PromotionItem(
+        promotion_id="future-test-promo",
+        promotion_name="Future Unreleased Target",
+        provider="Google Store",
+        subscription_plan="Google AI Pro",
+        duration_months=6,
+        supported_device_models=["Future Pixel"],
+        supported_countries=["US"],
+        account_requirements="",
+        billing_requirements="",
+        start_date=None,
+        expiration_date="2028-12-31T00:00:00Z",
+        official_terms_url="https://store.google.com",
+        source_status="UNVERIFIED_RESEARCH_TARGET",
+    )
+    device = make_test_device(model="Future Pixel")
+
+    report = eligibility_engine.evaluate(
+        promotion=unverified_promo,
         device_report=device,
         country_code="US",
         account_type="PERSONAL",

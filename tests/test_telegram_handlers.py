@@ -187,3 +187,25 @@ async def test_handle_text_default_help():
     await handle_text(update, context)
     update.message.reply_text.assert_called_once()
     assert "/claim" in update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_handle_photo_with_active_session():
+    """Verify photo upload classifies screenshot evidence correctly."""
+    from session_manager import session_manager
+    uid = uuid.uuid4().int % 10000000
+    session = session_manager.create_claim_session(telegram_id=uid)
+
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Ian")
+    photo_mock = MagicMock(file_id="photo_test_123")
+    update.message = MagicMock(spec=Message, photo=[photo_mock])
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+
+    context = MagicMock()
+    await handle_photo(update, context)
+    update.message.reply_text.assert_called_once()
+    reply_content = update.message.reply_text.call_args[0][0]
+    assert "Screenshot Received" in reply_content
+    assert "CLAIM_REPORTED_SUCCESS" in reply_content

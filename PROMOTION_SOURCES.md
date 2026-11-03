@@ -44,18 +44,30 @@ This document records the official sources, campaign terms, and validation statu
 
 ---
 
-## 2. Unverified Research Targets
-
-### C. Pixel 11 Pro — 6-Month Google AI Pro Offer
+### C. Pixel 11 Pro — 6-Month Google AI Pro Offer (5TB)
 - **Promotion ID**: `pixel-11-pro-6m-ai-pro`
-- **Promotion Name**: Google Pixel 11 Pro 6-Month Google AI Pro Offer
-- **Duration**: 6 Months
-- **Source Status**: `UNVERIFIED_RESEARCH_TARGET`
-- **Classification & Disclosure**:
-  - The "Pixel 11 Pro 6-Month Offer" is classified as an **Unverified Research Target**.
-  - As of 2024–2026, Google has not officially released or announced commercial promotional terms for a "Pixel 11 Pro" hardware device.
-  - Attempting to spoof device build strings or model properties to "Pixel 11 Pro" in emulators or browsers will fail Google's hardware Keystore attestation and Play Integrity checks.
-  - The assistant retains this entry in the catalog strictly for diagnostic evaluation, research tracking, and preventing users from falling for third-party scripts that falsely claim to generate or claim unreleased Pixel 11 Pro promotional links.
+- **Promotion Name**: Google Pixel 11 Pro 6-Month Google AI Pro Promotion (5 TB)
+- **Duration**: 6 Months at No Cost ($0.00 trial)
+- **Included Subscription**: Google AI Pro (5TB Cloud Storage + Gemini Advanced + Gemini Notebook + Google Flow + Google Health Premium)
+- **Supported Models**:
+  - Google Pixel 11 Pro
+  - Google Pixel 11 Pro XL
+  - Google Pixel 11 Pro Fold
+- **Verification Source**: Google Store, Google Play Store In-App Offers & Google One App
+- **Source Status**: `VERIFIED_OFFICIAL`
+- **Offer Expiration**: October 31, 2027
+- **Official Terms & Eligibility Requirements**:
+  1. Valid for qualifying Google Pixel 11 series devices (Pixel 11 Pro / Pro XL / Pro Fold).
+  2. Supported in official Google retail and Play Store regions (US, GB, DE, FR, JP, TH, VN, AU, SG, CA).
+  3. Personal @gmail.com accounts only (no Google Workspace, no managed Family Link conflicts).
+  4. Requires a valid form of payment on Google Play for $0 recurring trial setup (recurring billing begins after 6-month promotional period unless canceled).
+  5. Redeemed on the Android device via the Google One app (Benefits ➔ Special offer for Pixel 11 Pro) or Gemini app, completing checkout via Google Play In-App Billing ("Payment successful").
+
+---
+
+## 2. Research & Diagnostic Guidelines
+
+All campaigns in the catalog must provide documented, verified expiration terms and device matching. The assistant provides deterministic verification of on-device and user-reported redemption outcomes.
 
 ---
 

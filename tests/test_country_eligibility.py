@@ -17,6 +17,10 @@ def test_eligible_countries():
     assert gb["status"] == "ELIGIBLE"
     assert gb["pixel_promotions_supported"] is True
 
+    th = country_service.check_region_eligibility("TH")
+    assert th["status"] == "ELIGIBLE"
+    assert th["pixel_promotions_supported"] is True
+
 
 def test_ineligible_countries():
     vn = country_service.check_region_eligibility("VN")

@@ -50,9 +50,10 @@ class GoogleAccountFlow:
             "2. Open the native **Google One app** (or download it from the Google Play Store if not installed).",
             "3. If an offer banner appears on the home tab, tap **'Get perk'** or **'Claim offer'**.",
             "4. If not visible on the home screen, navigate to the **'Benefits'** tab or tap **Settings ➔ Check for offers**.",
-            f"5. Review the offer details: **{duration_months} Months Google AI / One subscription at $0/month**.",
+            f"5. Review the offer details: **{duration_months} Months Google AI Pro (5 TB) subscription at $0/month** (Offer for {target_device}).",
             "6. Select or confirm an on-file payment method (Google Play billing) to authorize the free trial setup.",
             "7. Tap **'Start trial'** or **'Subscribe'** to finalize activation directly through Google Play.",
+            "8. Upon confirmation, Google Play will display **'Payment successful'** and ask **'Require authentication for purchases?'**. Select 'Yes, always' or 'No, thanks' and tap **OK**.",
         ]
 
         notes = [

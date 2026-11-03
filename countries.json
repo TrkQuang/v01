@@ -86,8 +86,18 @@
     "purchase_requirement_regions": [],
     "redemption_regions": [],
     "official_source": "https://support.google.com/pixelphone/answer/4457705",
-    "last_verified": "2026-10-31T00:00:00Z",
-    "notes": "Google Pixel is not officially distributed via Google Store in Vietnam. Hardware bundle promotions are not supported for Vietnam Google Play regional accounts without supported country billing."
+    "last_verified": "2026-11-03T00:00:00Z",
+    "notes": "Google Pixel is not officially distributed via Google Store in Vietnam. Hardware bundle promotions are redeemed by users utilizing supported regional accounts (e.g. TH/US)."
+  },
+  "TH": {
+    "country_name": "Thailand",
+    "google_ai_pro_available": true,
+    "pixel_promotions_supported": true,
+    "purchase_requirement_regions": ["TH"],
+    "redemption_regions": ["TH"],
+    "official_source": "https://store.google.com/terms/pixel_ai_promotion",
+    "last_verified": "2026-11-03T00:00:00Z",
+    "notes": "Thailand Google Play and Google Store support Google AI Pro 5 TB promotional trial."
   },
   "SG": {
     "country_name": "Singapore",

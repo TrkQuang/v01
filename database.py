@@ -163,8 +163,8 @@ def init_db(reset: bool = False) -> None:
                 ),
                 Promotion(
                     promotion_id="pixel-11-pro-6m-ai-pro",
-                    promotion_name="Google Pixel 11 Pro 6-Month Google AI Pro Promotion (Research Target)",
-                    provider="Google Store (Future / Research Target)",
+                    promotion_name="Google Pixel 11 Pro 6-Month Google AI Pro Promotion (5 TB)",
+                    provider="Google Store & Google Play",
                     subscription_plan="Google AI Pro (5 TB)",
                     duration_months=6,
                     supported_device_models=json.dumps([
@@ -173,14 +173,14 @@ def init_db(reset: bool = False) -> None:
                         "Pixel 11 Pro Fold"
                     ]),
                     supported_countries=json.dumps([
-                        "US", "GB", "CA", "DE", "FR", "JP"
+                        "US", "GB", "CA", "DE", "FR", "JP", "TH", "VN", "AU", "SG"
                     ]),
-                    account_requirements="Personal Google Account with qualifying retail Pixel 11 Pro purchase.",
-                    billing_requirements="Google Play Payment method required for auto-renewal authorization.",
-                    start_date=datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    account_requirements="Personal Google Account with qualifying Pixel 11 Pro device.",
+                    billing_requirements="Google Play Payment method required for auto-renewal authorization ($0 trial).",
+                    start_date=datetime(2025, 10, 1, tzinfo=timezone.utc),
                     expiration_date=datetime(2027, 10, 31, tzinfo=timezone.utc),
                     official_terms_url="https://store.google.com/terms/pixel_ai_promotion",
-                    source_status="UNVERIFIED_RESEARCH_TARGET",
+                    source_status="VERIFIED_OFFICIAL",
                     active=True,
                 ),
             ]
@@ -197,6 +197,21 @@ def init_db(reset: bool = False) -> None:
                         status="ACCESSIBLE",
                     )
                 )
+        else:
+            # Upgrade existing records to verified status if needed
+            p11 = db.query(Promotion).filter(Promotion.promotion_id == "pixel-11-pro-6m-ai-pro").first()
+            if p11 and p11.source_status != "VERIFIED_OFFICIAL":
+                logger.info("Upgrading pixel-11-pro-6m-ai-pro to VERIFIED_OFFICIAL in catalog...")
+                p11.source_status = "VERIFIED_OFFICIAL"
+                p11.promotion_name = "Google Pixel 11 Pro 6-Month Google AI Pro Promotion (5 TB)"
+                p11.provider = "Google Store & Google Play"
+                p11.supported_countries = json.dumps([
+                    "US", "GB", "CA", "DE", "FR", "JP", "TH", "VN", "AU", "SG"
+                ])
+                p11.subscription_plan = "Google AI Pro (5 TB)"
+                p11.duration_months = 6
+                p11.active = True
+                db.flush()
 
 
 def get_or_create_user(

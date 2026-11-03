@@ -235,10 +235,11 @@ async def account_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             InlineKeyboardButton("🇯🇵 Japan", callback_data="set_country_JP"),
         ],
         [
+            InlineKeyboardButton("🇹🇭 Thailand", callback_data="set_country_TH"),
             InlineKeyboardButton("🇻🇳 Vietnam", callback_data="set_country_VN"),
-            InlineKeyboardButton("🇮🇳 India", callback_data="set_country_IN"),
         ],
         [
+            InlineKeyboardButton("🇮🇳 India", callback_data="set_country_IN"),
             InlineKeyboardButton("🗑️ Delete My Data (GDPR)", callback_data="gdpr_delete_data"),
         ],
     ]
@@ -292,11 +293,14 @@ async def eligibility_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton("🇯🇵 Japan", callback_data="check_country_JP"),
         ],
         [
+            InlineKeyboardButton("🇹🇭 Thailand", callback_data="check_country_TH"),
             InlineKeyboardButton("🇻🇳 Vietnam", callback_data="check_country_VN"),
-            InlineKeyboardButton("🇮🇳 India", callback_data="check_country_IN"),
         ],
         [
+            InlineKeyboardButton("🇮🇳 India", callback_data="check_country_IN"),
             InlineKeyboardButton("🇨🇦 Canada", callback_data="check_country_CA"),
+        ],
+        [
             InlineKeyboardButton("🇦🇺 Australia", callback_data="check_country_AU"),
         ],
     ]
@@ -508,8 +512,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         buttons = [
             [InlineKeyboardButton("🇺🇸 United States", callback_data="claim_ctry_US"), InlineKeyboardButton("🇬🇧 United Kingdom", callback_data="claim_ctry_GB")],
             [InlineKeyboardButton("🇩🇪 Germany", callback_data="claim_ctry_DE"), InlineKeyboardButton("🇯🇵 Japan", callback_data="claim_ctry_JP")],
-            [InlineKeyboardButton("🇻🇳 Vietnam", callback_data="claim_ctry_VN"), InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+            [InlineKeyboardButton("🇹🇭 Thailand", callback_data="claim_ctry_TH"), InlineKeyboardButton("🇻🇳 Vietnam", callback_data="claim_ctry_VN")],
+            [InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
         await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
