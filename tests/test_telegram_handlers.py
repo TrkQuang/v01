@@ -65,6 +65,35 @@ async def test_claim_command_menu():
 
 
 @pytest.mark.asyncio
+async def test_claim_command_resumed_eligibility_passed():
+    """Verify /claim resumes session in ELIGIBILITY_PASSED with redemption instructions button instead of crashing."""
+    from session_manager import session_manager
+    from models import ClaimState
+    uid = uuid.uuid4().int % 10000000
+    session = session_manager.create_claim_session(telegram_id=uid)
+    session_manager.transition_state(session.id, ClaimState.PROMOTION_SELECTED, "STEP_1")
+    session_manager.transition_state(session.id, ClaimState.DEVICE_SELECTED, "STEP_2")
+    session_manager.transition_state(session.id, ClaimState.COUNTRY_SELECTED, "STEP_3")
+    session_manager.transition_state(session.id, ClaimState.ELIGIBILITY_CHECKING, "STEP_4")
+    session_manager.transition_state(session.id, ClaimState.ELIGIBILITY_PASSED, "STEP_4_RESULT")
+
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Sam", username="sam")
+    update.effective_chat = MagicMock(spec=Chat, id=uid)
+    update.message = MagicMock(spec=Message)
+    update.message.reply_text = AsyncMock()
+
+    context = MagicMock()
+    context.user_data = {}
+
+    await claim(update, context)
+    update.message.reply_text.assert_called_once()
+    call_args = update.message.reply_text.call_args[0][0]
+    assert "ELIGIBILITY_PASSED" in call_args
+    assert "Eligibility confirmed" in call_args
+
+
+@pytest.mark.asyncio
 async def test_promotions_command():
     uid = uuid.uuid4().int % 10000000
     update = MagicMock(spec=Update)

@@ -171,21 +171,85 @@ async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     session, message = redemption_workflow.start_claim(user.id)
     context.user_data["active_session_id"] = session.id
+    state_val = session.current_state
 
-    promos = promotion_service.list_all_promotions()
-    buttons = []
-    for p in promos:
-        badge = "✅" if p.source_status == "VERIFIED_OFFICIAL" else "🔬"
-        buttons.append([InlineKeyboardButton(f"{badge} {p.promotion_name}", callback_data=f"claim_promo_{p.promotion_id}")])
+    # 1. State: IDLE -> Step 1: Select a promotion
+    if state_val == ClaimState.IDLE.value:
+        promos = promotion_service.list_all_promotions()
+        buttons = []
+        for p in promos:
+            badge = "✅" if p.source_status == "VERIFIED_OFFICIAL" else "🔬"
+            buttons.append([InlineKeyboardButton(f"{badge} {p.promotion_name}", callback_data=f"claim_promo_{p.promotion_id}")])
+        buttons.append([InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")])
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Please select the promotion you wish to claim:"
 
-    buttons.append([InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")])
-    reply_markup = InlineKeyboardMarkup(buttons)
+    # 2. State: PROMOTION_SELECTED -> Step 2: Select a device
+    elif state_val == ClaimState.PROMOTION_SELECTED.value:
+        buttons = [
+            [InlineKeyboardButton("📱 Google Pixel 9 Pro", callback_data="claim_dev_Pixel 9 Pro")],
+            [InlineKeyboardButton("📱 Google Pixel 9 Pro XL", callback_data="claim_dev_Pixel 9 Pro XL")],
+            [InlineKeyboardButton("📱 Google Pixel 11 Pro", callback_data="claim_dev_Pixel 11 Pro")],
+            [InlineKeyboardButton("💻 Browser Simulation (Test)", callback_data="claim_dev_Browser")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Please select or verify your Google Pixel device model:"
+
+    # 3. State: DEVICE_SELECTED -> Step 3: Select country
+    elif state_val == ClaimState.DEVICE_SELECTED.value:
+        buttons = [
+            [InlineKeyboardButton("🇺🇸 United States", callback_data="claim_ctry_US"), InlineKeyboardButton("🇬🇧 United Kingdom", callback_data="claim_ctry_GB")],
+            [InlineKeyboardButton("🇩🇪 Germany", callback_data="claim_ctry_DE"), InlineKeyboardButton("🇯🇵 Japan", callback_data="claim_ctry_JP")],
+            [InlineKeyboardButton("🇹🇭 Thailand", callback_data="claim_ctry_TH"), InlineKeyboardButton("🇻🇳 Vietnam", callback_data="claim_ctry_VN")],
+            [InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Please confirm your Google Play Store country profile:"
+
+    # 4. State: COUNTRY_SELECTED or ELIGIBILITY_CHECKING -> Step 4: Run evaluation
+    elif state_val in (ClaimState.COUNTRY_SELECTED.value, ClaimState.ELIGIBILITY_CHECKING.value):
+        buttons = [
+            [InlineKeyboardButton("🔬 Run Eligibility Evaluation", callback_data=f"claim_eval_{session.id}")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Ready to evaluate promotion prerequisites against Google Store policies:"
+
+    # 5. State: ELIGIBILITY_PASSED or ELIGIBILITY_UNKNOWN -> Step 5: Generate Guide
+    elif state_val in (ClaimState.ELIGIBILITY_PASSED.value, ClaimState.ELIGIBILITY_UNKNOWN.value):
+        buttons = [
+            [InlineKeyboardButton("📖 Generate Redemption Instructions", callback_data=f"claim_guide_{session.id}")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Eligibility confirmed! Tap below to generate step-by-step redemption instructions:"
+
+    # 6. State: REDEMPTION_READY, USER_ACTION_REQUIRED, CLAIM_IN_PROGRESS -> Step 6/7: Submit result
+    elif state_val in (ClaimState.REDEMPTION_READY.value, ClaimState.USER_ACTION_REQUIRED.value, ClaimState.CLAIM_IN_PROGRESS.value):
+        buttons = [
+            [InlineKeyboardButton("🎉 I Successfully Claimed It", callback_data=f"claim_rep_success_{session.id}")],
+            [InlineKeyboardButton("💳 Payment Method Required", callback_data=f"claim_rep_payment_{session.id}")],
+            [InlineKeyboardButton("❌ Claim Failed / Ineligible", callback_data=f"claim_rep_failed_{session.id}")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Awaiting your outcome report on Google One redemption:"
+
+    # Fallback for BLOCKED or other
+    else:
+        buttons = [
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel Claim", callback_data="claim_cancel")],
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        prompt_text = "Previous evaluation blocked. You can restart with another configuration:"
 
     text = (
         f"🚀 *Pixel Promotion Claim Assistant*\n"
         f"Session: `{session.session_uuid[:8]}…` | State: `{session.current_state}`\n\n"
         f"{message}\n\n"
-        "Please select the promotion you wish to claim:"
+        f"{prompt_text}"
     )
     target_msg = update.message if update.message is not None else update.effective_message
     await safe_reply(target_msg, text, reply_markup=reply_markup)
@@ -480,6 +544,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")])
         await safe_reply(query.message, "Step 1: Select a promotion to claim:", reply_markup=InlineKeyboardMarkup(buttons))
 
+    elif data == "claim_restart":
+        active = session_manager.get_active_session(user.id)
+        if active:
+            session_manager.cancel_session(active.id, "User requested restart")
+        new_session = session_manager.create_claim_session(user.id)
+        context.user_data["active_session_id"] = new_session.id
+
+        promos = promotion_service.list_all_promotions()
+        buttons = [[InlineKeyboardButton(p.promotion_name, callback_data=f"claim_promo_{p.promotion_id}")] for p in promos]
+        buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")])
+        await safe_reply(query.message, "🔄 Previous session reset. Step 1: Select a promotion to claim:", reply_markup=InlineKeyboardMarkup(buttons))
+
     elif data.startswith("claim_promo_"):
         promo_id = data.replace("claim_promo_", "")
         s_id = context.user_data.get("active_session_id")
@@ -488,16 +564,20 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             s_id = s.id if s else None
 
         if not s_id:
-            await safe_reply(query.message, "Session expired. Please type /claim to restart.")
-            return
+            s = session_manager.create_claim_session(user.id)
+            s_id = s.id
 
         res = redemption_workflow.select_promotion(s_id, promo_id)
+        if res.data and "session_id" in res.data:
+            s_id = res.data["session_id"]
+            context.user_data["active_session_id"] = s_id
+
         buttons = [
             [InlineKeyboardButton("📱 Google Pixel 9 Pro", callback_data="claim_dev_Pixel 9 Pro")],
             [InlineKeyboardButton("📱 Google Pixel 9 Pro XL", callback_data="claim_dev_Pixel 9 Pro XL")],
             [InlineKeyboardButton("📱 Google Pixel 11 Pro", callback_data="claim_dev_Pixel 11 Pro")],
             [InlineKeyboardButton("💻 Browser Simulation (Test)", callback_data="claim_dev_Browser")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
         await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -513,7 +593,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🇺🇸 United States", callback_data="claim_ctry_US"), InlineKeyboardButton("🇬🇧 United Kingdom", callback_data="claim_ctry_GB")],
             [InlineKeyboardButton("🇩🇪 Germany", callback_data="claim_ctry_DE"), InlineKeyboardButton("🇯🇵 Japan", callback_data="claim_ctry_JP")],
             [InlineKeyboardButton("🇹🇭 Thailand", callback_data="claim_ctry_TH"), InlineKeyboardButton("🇻🇳 Vietnam", callback_data="claim_ctry_VN")],
-            [InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+            [InlineKeyboardButton("🇮🇳 India", callback_data="claim_ctry_IN")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
         await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -527,7 +608,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         res = redemption_workflow.select_country(s_id, c_code)
         buttons = [
             [InlineKeyboardButton("🔬 Run Eligibility Evaluation", callback_data=f"claim_eval_{s_id}")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
         await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -537,11 +618,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if res.can_proceed:
             buttons = [
                 [InlineKeyboardButton("📖 Generate Redemption Instructions", callback_data=f"claim_guide_{s_id}")],
-                [InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+                [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
             ]
             await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
         else:
-            await safe_reply(query.message, res.message)
+            buttons = [
+                [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
+            ]
+            await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data.startswith("claim_guide_"):
         s_id = int(data.replace("claim_guide_", ""))
@@ -550,6 +634,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🎉 I Successfully Claimed It", callback_data=f"claim_rep_success_{s_id}")],
             [InlineKeyboardButton("💳 Payment Method Required", callback_data=f"claim_rep_payment_{s_id}")],
             [InlineKeyboardButton("❌ Claim Failed / Ineligible", callback_data=f"claim_rep_failed_{s_id}")],
+            [InlineKeyboardButton("🔄 Start Over", callback_data="claim_restart"), InlineKeyboardButton("❌ Cancel", callback_data="claim_cancel")],
         ]
         await safe_reply(query.message, res.message, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -680,6 +765,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
+# ── Global Error Handler ─────────────────────────────────────────────────────
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and inform the user safely."""
+    logger.error("Exception while handling update: %s", context.error, exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await safe_reply(
+                update.effective_message,
+                "⚠️ An unexpected state error occurred. "
+                "You can use /claim to resume or /cancel to start a fresh claim workflow.",
+            )
+        except Exception:
+            pass
+
+
 # ── Application Main ──────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -692,6 +793,9 @@ def main() -> None:
         return
 
     app = Application.builder().token(token).build()
+
+    # Register error handler
+    app.add_error_handler(error_handler)
 
     # Commands
     app.add_handler(CommandHandler("start", start))

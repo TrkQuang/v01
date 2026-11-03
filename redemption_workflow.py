@@ -62,8 +62,24 @@ class RedemptionWorkflow:
             )
 
         with get_db() as db:
-            p_record = db.query(Promotion).filter(Promotion.promotion_id == promotion_id).first()
             s_record = db.query(ClaimSession).filter(ClaimSession.id == session_id).first()
+            if not s_record:
+                return WorkflowStepResult(
+                    current_state=ClaimState.IDLE,
+                    message="Session not found. Please type /claim to start fresh.",
+                    can_proceed=False,
+                )
+
+            # If user selects a promotion while the active session is already past step 1,
+            # cancel the old session and start a clean session for this newly selected promotion
+            if s_record.current_state not in (ClaimState.IDLE.value, ClaimState.PROMOTION_SELECTED.value):
+                user_tid = s_record.user.telegram_id
+                self.session_mgr.cancel_session(session_id, "User restarted with new promotion selection")
+                new_session = self.session_mgr.create_claim_session(user_tid)
+                session_id = new_session.id
+                s_record = db.query(ClaimSession).filter(ClaimSession.id == session_id).first()
+
+            p_record = db.query(Promotion).filter(Promotion.promotion_id == promotion_id).first()
             if s_record and p_record:
                 s_record.promotion_id = p_record.id
 
@@ -77,7 +93,7 @@ class RedemptionWorkflow:
             current_state=new_state,
             message=f"Selected: **{promo.promotion_name}** ({promo.duration_months} Months).\n\nStep 2: Select or verify your device.",
             can_proceed=True,
-            data={"promotion": promo.to_dict()},
+            data={"promotion": promo.to_dict(), "session_id": session_id},
         )
 
     def select_device(

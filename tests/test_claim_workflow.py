@@ -80,6 +80,22 @@ def test_duplicate_claim_prevention():
         session_manager.create_claim_session(telegram_id=uid, promotion_id=1)
 
 
+def test_select_promotion_when_session_in_later_state():
+    """Verify selecting a promotion on an active session in later state (e.g. ELIGIBILITY_PASSED) resets cleanly without error."""
+    uid = uuid.uuid4().int % 10000000
+    session = session_manager.create_claim_session(telegram_id=uid)
+    session_manager.transition_state(session.id, ClaimState.PROMOTION_SELECTED, "STEP_1")
+    session_manager.transition_state(session.id, ClaimState.DEVICE_SELECTED, "STEP_2")
+    session_manager.transition_state(session.id, ClaimState.COUNTRY_SELECTED, "STEP_3")
+    session_manager.transition_state(session.id, ClaimState.ELIGIBILITY_CHECKING, "STEP_4")
+    session_manager.transition_state(session.id, ClaimState.ELIGIBILITY_PASSED, "STEP_4_RESULT")
+
+    # User re-selects a promotion (the exact action from the bug report)
+    res = redemption_workflow.select_promotion(session.id, "pixel-11-pro-6m-ai-pro")
+    assert res.can_proceed is True
+    assert res.current_state == ClaimState.PROMOTION_SELECTED
+
+
 def test_redemption_reported_success_and_screenshot_classification():
     """Requirements 15, 16, 17: User report and screenshot verification."""
     uid = uuid.uuid4().int % 10000000

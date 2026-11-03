@@ -23,18 +23,18 @@ logger = logging.getLogger(__name__)
 # Valid state transitions graph
 VALID_TRANSITIONS: Dict[ClaimState, Set[ClaimState]] = {
     ClaimState.IDLE: {ClaimState.PROMOTION_SELECTED, ClaimState.CANCELLED},
-    ClaimState.PROMOTION_SELECTED: {ClaimState.DEVICE_SELECTED, ClaimState.CANCELLED},
-    ClaimState.DEVICE_SELECTED: {ClaimState.COUNTRY_SELECTED, ClaimState.CANCELLED},
-    ClaimState.COUNTRY_SELECTED: {ClaimState.ELIGIBILITY_CHECKING, ClaimState.CANCELLED},
+    ClaimState.PROMOTION_SELECTED: {ClaimState.PROMOTION_SELECTED, ClaimState.DEVICE_SELECTED, ClaimState.CANCELLED},
+    ClaimState.DEVICE_SELECTED: {ClaimState.DEVICE_SELECTED, ClaimState.COUNTRY_SELECTED, ClaimState.CANCELLED},
+    ClaimState.COUNTRY_SELECTED: {ClaimState.COUNTRY_SELECTED, ClaimState.ELIGIBILITY_CHECKING, ClaimState.CANCELLED},
     ClaimState.ELIGIBILITY_CHECKING: {
         ClaimState.ELIGIBILITY_PASSED,
         ClaimState.ELIGIBILITY_BLOCKED,
         ClaimState.ELIGIBILITY_UNKNOWN,
         ClaimState.CANCELLED,
     },
-    ClaimState.ELIGIBILITY_PASSED: {ClaimState.REDEMPTION_READY, ClaimState.CANCELLED},
-    ClaimState.ELIGIBILITY_UNKNOWN: {ClaimState.REDEMPTION_READY, ClaimState.CANCELLED},
-    ClaimState.ELIGIBILITY_BLOCKED: {ClaimState.CANCELLED, ClaimState.IDLE},
+    ClaimState.ELIGIBILITY_PASSED: {ClaimState.REDEMPTION_READY, ClaimState.ELIGIBILITY_CHECKING, ClaimState.CANCELLED},
+    ClaimState.ELIGIBILITY_UNKNOWN: {ClaimState.REDEMPTION_READY, ClaimState.ELIGIBILITY_CHECKING, ClaimState.CANCELLED},
+    ClaimState.ELIGIBILITY_BLOCKED: {ClaimState.ELIGIBILITY_CHECKING, ClaimState.CANCELLED, ClaimState.IDLE},
     ClaimState.REDEMPTION_READY: {ClaimState.USER_ACTION_REQUIRED, ClaimState.CANCELLED},
     ClaimState.USER_ACTION_REQUIRED: {
         ClaimState.CLAIM_IN_PROGRESS,
