@@ -28,11 +28,13 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+import pyotp
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    ConversationHandler,
     ContextTypes,
     MessageHandler,
     filters,
@@ -118,6 +120,206 @@ async def safe_edit(
         )
 
 
+# ── Conversation states for /login ───────────────────────────────────────────
+AWAIT_EMAIL, AWAIT_PASSWORD, AWAIT_TOTP = range(3)
+
+def _get_session(chat_id: int) -> dict:
+    if chat_id not in config.SESSION_STORE:
+        config.SESSION_STORE[chat_id] = {}
+    return config.SESSION_STORE[chat_id]
+
+def _make_progress_callback(bot, chat_id: int, loop: asyncio.AbstractEventLoop):
+    def _cb(msg: str, screenshot_bytes: bytes | None = None):
+        async def _send():
+            try:
+                if screenshot_bytes:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=io.BytesIO(screenshot_bytes),
+                        caption=msg[:1024] if msg else None,
+                    )
+                else:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=msg,
+                    )
+            except Exception as e:
+                logger.warning("Progress send error: %s", e)
+
+        asyncio.run_coroutine_threadsafe(_send(), loop)
+
+    return _cb
+
+
+# ── /login Conversation Handlers ──────────────────────────────────────────────
+
+async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "📧 Vui lòng nhập địa chỉ Gmail của bạn:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return AWAIT_EMAIL
+
+
+async def login_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    email = update.message.text.strip()
+    context.user_data["pending_email"] = email
+    await update.message.reply_text(
+        f"✅ Đã nhận Email: `{email}`\n\n🔒 Bây giờ hãy nhập mật khẩu Google của bạn:",
+        parse_mode="Markdown",
+    )
+    return AWAIT_PASSWORD
+
+
+async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["pending_password"] = update.message.text.strip()
+    await update.message.reply_text(
+        "🔑 *Cài đặt mã 2FA (Google Authenticator)*\n\n"
+        "Nhập mã bí mật 2FA TOTP (chuỗi Base32, ví dụ: `JBSWY3DPEHPK3PXP`), "
+        "hoặc gửi lệnh `/skip` nếu tài khoản của bạn không dùng 2FA:",
+        parse_mode="Markdown",
+    )
+    return AWAIT_TOTP
+
+
+async def login_totp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    totp_input = update.message.text.strip()
+    chat_id = update.effective_chat.id
+    session = _get_session(chat_id)
+
+    session["email"] = context.user_data.pop("pending_email", None)
+    session["password"] = context.user_data.pop("pending_password", None)
+
+    if totp_input.lower() in ("/skip", "skip", "no", "không"):
+        session["totp_secret"] = None
+        totp_status = "Đã bỏ qua (Không dùng 2FA)"
+    else:
+        cleaned = totp_input.replace(" ", "").upper()
+        try:
+            pyotp.TOTP(cleaned).now()
+            session["totp_secret"] = cleaned
+            totp_status = f"✅ Đã bật (`{cleaned[:4]}…`)"
+        except Exception:
+            await update.message.reply_text(
+                "⚠️ Chuỗi 2FA không hợp lệ. Vui lòng thử lại hoặc gửi `/skip`."
+            )
+            return AWAIT_TOTP
+
+    from device_simulator import create_device_profile
+    session["device"] = create_device_profile()
+
+    await update.message.reply_text(
+        f"🎉 *Thông tin đăng nhập đã được lưu!*\n\n"
+        f"📧 Email: `{session['email']}`\n"
+        f"🔑 2FA: {totp_status}\n\n"
+        "👉 Bây giờ hãy dùng lệnh `/check_offer` để bot tự động mở trình duyệt Pixel 11 Pro, "
+        "đăng nhập và tự động quét/nhận gói ưu đãi Google One!",
+        parse_mode="Markdown",
+    )
+    return ConversationHandler.END
+
+
+async def login_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.pop("pending_email", None)
+    context.user_data.pop("pending_password", None)
+    await update.message.reply_text("❌ Đã hủy đăng nhập.")
+    return ConversationHandler.END
+
+
+# ── /check_offer & /get_link Handlers ─────────────────────────────────────────
+
+async def check_offer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Run Google One automation and look for Gemini Pro offer."""
+    chat_id = update.effective_chat.id
+    session = _get_session(chat_id)
+
+    email = session.get("email")
+    password = session.get("password")
+    totp_secret = session.get("totp_secret")
+    device = session.get("device")
+
+    if not email or not password:
+        await update.message.reply_text(
+            "⚠️ Bạn chưa đăng nhập tài khoản. Hãy dùng lệnh `/login` trước để nhập email và mật khẩu."
+        )
+        return
+
+    if not device:
+        from device_simulator import create_device_profile
+        device = create_device_profile()
+        session["device"] = device
+
+    await update.message.reply_text(
+        "🚀 *Bắt đầu quy trình tự động hóa Pixel 11 Pro…*\n"
+        "Bot sẽ đăng nhập và gửi ảnh chụp màn hình từng bước vào đây:",
+        parse_mode="Markdown",
+    )
+
+    loop = asyncio.get_event_loop()
+    progress_cb = _make_progress_callback(context.bot, chat_id, loop)
+
+    try:
+        from google_automation import check_gemini_offer
+        offer_link = await loop.run_in_executor(
+            None,
+            lambda: check_gemini_offer(
+                email=email,
+                password=password,
+                device=device,
+                totp_secret=totp_secret,
+                progress_callback=progress_cb,
+            ),
+        )
+    except Exception as exc:
+        logger.exception("Error during check_offer for chat %s", chat_id)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ *Lỗi trong quá trình tự động:* {exc}",
+            parse_mode="Markdown",
+        )
+        return
+
+    if offer_link:
+        session["offer_link"] = offer_link
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "🎉 *Gói Google One / Gemini Offer đã được xử lý!*\n\n"
+                f"🔗 *Link ưu đãi:*\n{offer_link}\n\n"
+                "Bot đã tự động bấm nhận gói trên Google One.\n"
+                "_Dùng lệnh /get_link để xem lại liên kết._"
+            ),
+            parse_mode="Markdown",
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "😔 *Không tìm thấy gói ưu đãi Pixel 11 Pro trên tài khoản này qua giao diện Web.*\n\n"
+                "📌 **Giải thích kỹ thuật:**\n"
+                "• Gói khuyến mãi Pixel 11 Pro 5TB là gói cấp độc quyền qua **Google Play In-App Billing trên ứng dụng Android** (như trong ảnh bạn đã xem).\n"
+                "• Google không phân phối gói phần cứng này qua giao diện Web của Chrome nếu máy chưa check-in Play Services.\n"
+                "• Để nhận được 100%, bạn cần đăng nhập tài khoản này vào điện thoại Android (đã spoof model Pixel 11 Pro) và mở app Google One để nhận."
+            ),
+            parse_mode="Markdown",
+        )
+
+
+async def get_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    link = _get_session(chat_id).get("offer_link")
+    if link:
+        await update.message.reply_text(
+            f"🔗 *Link ưu đãi gần nhất:*\n\n{link}",
+            parse_mode="Markdown",
+        )
+    else:
+        await update.message.reply_text(
+            "ℹ️ Chưa có link ưu đãi nào được ghi nhận. Hãy dùng `/check_offer` trước.",
+            parse_mode="Markdown",
+        )
+
+
 # ── Command Handlers ──────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -145,20 +347,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     text = (
-        f"👋 *Welcome to the Pixel Promotion Claim Assistant*, {user.first_name}!\n\n"
-        "This assistant helps legitimate **Google Pixel** owners discover, evaluate, and "
-        "activate official **Google AI Pro / Gemini Advanced** promotional offers.\n\n"
-        "🔒 *Security Directive:*\n"
-        "• This platform **never requests or stores passwords, 2FA codes, or session tokens**.\n"
-        "• All redemptions are performed directly by you on Google's official interfaces.\n\n"
-        "📋 *Quick Commands:*\n"
-        "• /claim — Start the 7-step guided claim workflow\n"
-        "• /promotions — Browse officially documented Pixel promotions\n"
-        "• /device — Inspect host execution layer & hardware proof\n"
-        "• /eligibility — Test country and regional store eligibility\n"
-        "• /diagnose — Run comprehensive diagnostic probe\n"
-        "• /account — Configure account profile & billing country\n"
-        "• /cancel — Cancel an in-progress claim workflow"
+        f"👋 *Chào mừng đến với Pixel Promotion Claim Assistant*, {user.first_name}!\n\n"
+        "Hỗ trợ kiểm tra, quét và nhận gói khuyến mãi **Google AI Pro / Gemini Advanced (5 TB)**.\n\n"
+        "📋 *Các lệnh chính:*\n"
+        "• `/login` — Đăng nhập tài khoản Google (Email, Pass, 2FA) để chạy auto\n"
+        "• `/check_offer` — Tự động mở Chrome Pixel 11 Pro quét và nhận gói Google One\n"
+        "• `/get_link` — Xem link ưu đãi đã quét được\n"
+        "• `/claim` — Hướng dẫn nhận gói 7 bước (trên điện thoại Android)\n"
+        "• `/promotions` — Danh mục các gói khuyến mãi chính thức\n"
+        "• `/status` — Trạng thái phiên làm việc và thiết bị\n"
+        "• `/cancel` — Hủy bỏ tiến trình hiện tại"
     )
     target_msg = update.message if update.message is not None else update.effective_message
     await safe_reply(target_msg, text, reply_markup=reply_markup)
@@ -797,7 +995,29 @@ def main() -> None:
     # Register error handler
     app.add_error_handler(error_handler)
 
-    # Commands
+    # Login Conversation Handler
+    login_conv = ConversationHandler(
+        entry_points=[CommandHandler("login", login_start)],
+        states={
+            AWAIT_EMAIL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, login_email)
+            ],
+            AWAIT_PASSWORD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, login_password)
+            ],
+            AWAIT_TOTP: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, login_totp)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", login_cancel)],
+    )
+    app.add_handler(login_conv)
+
+    # Automation Commands
+    app.add_handler(CommandHandler("check_offer", check_offer))
+    app.add_handler(CommandHandler("get_link", get_link))
+
+    # Standard Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("claim", claim))
     app.add_handler(CommandHandler("promotions", promotions_cmd))

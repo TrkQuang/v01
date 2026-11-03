@@ -48,10 +48,48 @@ CHROME_VERSION       = _detect_chrome_version()
 CHROME_MAJOR_VERSION = int(CHROME_VERSION.split(".")[0]) if "." in CHROME_VERSION else 156
 
 # ── Google URLs ───────────────────────────────────────────────────────────────
+GMAIL_LOGIN_URL             = "https://accounts.google.com/ServiceLogin?hl=en"
 GOOGLE_ONE_URL              = "https://one.google.com/"
 GOOGLE_ONE_BENEFITS_URL     = "https://one.google.com/benefits"
 GOOGLE_ONE_DIRECT_OFFER_URL = "https://one.google.com/benefits/LOCKED:BARD_ADVANCED_MODE:BENEFIT_OFFERING_MEMBER:IN:TIER0?from=1"
 GOOGLE_ONE_OFFERS_URL       = "https://one.google.com/about/plans"
+
+# ── Hardware Profile for Navigator Spoofing ──────────────────────────────────
+DEVICE_RAM_GB       = 16
+DEVICE_CPU_CORES    = 7
+DEVICE_GPU_VENDOR   = "Imagination Technologies"
+DEVICE_GPU_RENDERER = "PowerVR CXTP-48-1536"
+
+# ── User-Agent ────────────────────────────────────────────────────────────────
+USER_AGENT_TEMPLATES = [
+    (
+        "Mozilla/5.0 (Linux; Android 10; K) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/{chrome} Mobile Safari/537.36"
+    ),
+]
+
+# ── Gemini Offer Detection Keywords ──────────────────────────────────────────
+GEMINI_OFFER_KEYWORDS = [
+    "gemini pro",
+    "gemini advanced",
+    "bard advanced",
+    "bard_advanced",
+    "12 month",
+    "12-month",
+    "6 month",
+    "6-month",
+    "free trial",
+    "claim offer",
+    "redeem",
+    "google ai pro",
+    "5 tb",
+    "ưu đãi",
+    "dùng thử",
+]
+
+# ── Session Storage ───────────────────────────────────────────────────────────
+SESSION_STORE: dict = {}
 
 # ── Webdriver Settings ────────────────────────────────────────────────────────
 WEBDRIVER_TIMEOUT = 25

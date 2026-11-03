@@ -238,3 +238,46 @@ async def test_handle_photo_with_active_session():
     reply_content = update.message.reply_text.call_args[0][0]
     assert "Screenshot Received" in reply_content
     assert "CLAIM_REPORTED_SUCCESS" in reply_content
+
+
+@pytest.mark.asyncio
+async def test_login_flow_and_get_link():
+    """Verify /login conversation and /get_link command."""
+    from main import login_start, login_email, login_password, login_totp, get_link, check_offer
+    uid = uuid.uuid4().int % 10000000
+    update = MagicMock(spec=Update)
+    update.effective_user = MagicMock(spec=TgUser, id=uid, first_name="Tester")
+    update.effective_chat = MagicMock(spec=Chat, id=uid)
+    update.message = MagicMock(spec=Message)
+    update.message.reply_text = AsyncMock()
+
+    context = MagicMock()
+    context.user_data = {}
+
+    # 1. login_start
+    await login_start(update, context)
+    update.message.reply_text.assert_called_once()
+    assert "Gmail" in update.message.reply_text.call_args[0][0]
+
+    # 2. login_email
+    update.message.reply_text.reset_mock()
+    update.message.text = "tester@gmail.com"
+    await login_email(update, context)
+    assert context.user_data["pending_email"] == "tester@gmail.com"
+
+    # 3. login_password
+    update.message.reply_text.reset_mock()
+    update.message.text = "supersecret123"
+    await login_password(update, context)
+    assert context.user_data["pending_password"] == "supersecret123"
+
+    # 4. login_totp with /skip
+    update.message.reply_text.reset_mock()
+    update.message.text = "/skip"
+    await login_totp(update, context)
+    assert "đã được lưu" in update.message.reply_text.call_args[0][0]
+
+    # 5. get_link before check_offer
+    update.message.reply_text.reset_mock()
+    await get_link(update, context)
+    assert "Chưa có link" in update.message.reply_text.call_args[0][0]
